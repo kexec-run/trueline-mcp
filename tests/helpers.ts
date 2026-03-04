@@ -24,3 +24,15 @@ export function rangeChecksum(
   }
   return formatChecksum(startLine, effectiveEnd, hash);
 }
+
+/**
+ * Compute 2-letter content hash for a line.
+ *
+ * Maps FNV-1a output to two lowercase ASCII letters (676 possible values).
+ */
+export function lineHash(line: string): string {
+  const h = fnv1aHash(line);
+  const c1 = String.fromCharCode(97 + (h % 26));
+  const c2 = String.fromCharCode(97 + ((h >>> 8) % 26));
+  return c1 + c2;
+}

@@ -8,7 +8,7 @@
 //
 // Key design choices:
 //  - Forward ascending sort (opposite of the in-memory back-to-front approach
-//    in `applyEdits`) because we have no random access during streaming.
+//    used previously) because we have no random access during streaming.
 //  - Pending-write pattern: each output line is buffered and flushed when the
 //    next line arrives, so the last line can omit its EOL if the original file
 //    had no trailing newline.
@@ -36,7 +36,7 @@ import type { StreamEditOp } from "./tools/shared.ts";
  * `fnv1aHash` performs internally. This lets us hash file content
  * without ever decoding it to a JS string.
  */
-export function fnv1aHashBytes(
+function fnv1aHashBytes(
   buf: Buffer,
   start: number,
   end: number,
@@ -52,7 +52,7 @@ export function fnv1aHashBytes(
 // Byte-level line streaming
 // ==============================================================================
 
-export interface ByteLine {
+interface ByteLine {
   lineBytes: Buffer;
   eolBytes: Buffer;
   lineNumber: number;
@@ -71,7 +71,7 @@ const EMPTY_BUF = Buffer.alloc(0);
  * and the 1-based line number. Handles `\r\n` pairs split across chunk
  * boundaries the same way `streamLines` in `read.ts` does.
  */
-export async function* streamByteLines(filePath: string): AsyncGenerator<ByteLine> {
+async function* streamByteLines(filePath: string): AsyncGenerator<ByteLine> {
   const stream = createReadStream(filePath);
   let partials: Buffer[] = [];
   let partialsLen = 0;
@@ -171,15 +171,16 @@ function flushPartials(partials: Buffer[], totalLen: number): Buffer {
 // Streaming edit engine
 // ==============================================================================
 
-export type StreamingEditResult =
+type StreamingEditResult =
   | { ok: true; newChecksum: string; changed: boolean; tmpPath?: string }
   | { ok: false; error: string };
 
 /**
  * Convert a line's FNV-1a hash to the 2-letter hash used in line references.
  *
- * Same mapping as `lineHash` in trueline.ts but operates on a precomputed
- * numeric hash rather than a string, avoiding redundant UTF-8 encoding.
+ * Maps FNV-1a output to two lowercase ASCII letters (676 possible values).
+ * Operates on a precomputed numeric hash rather than a string, avoiding
+ * redundant UTF-8 encoding.
  */
 function hashToLetters(h: number): string {
   const c1 = String.fromCharCode(97 + (h % 26));

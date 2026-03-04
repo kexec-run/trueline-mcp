@@ -2,40 +2,11 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { fnv1aHash, FNV_OFFSET_BASIS, lineHash } from "../src/trueline.ts";
-import { rangeChecksum } from "./helpers.ts";
+import { fnv1aHash, FNV_OFFSET_BASIS } from "../src/trueline.ts";
+import { lineHash, rangeChecksum } from "./helpers.ts";
 import { validateEdits } from "../src/tools/shared.ts";
-import { fnv1aHashBytes, streamByteLines, streamingEdit, type ByteLine } from "../src/streaming-edit.ts";
+import { streamingEdit } from "../src/streaming-edit.ts";
 
-describe("fnv1aHashBytes", () => {
-  test("matches fnv1aHash for ASCII", () => {
-    const str = "hello world";
-    const buf = Buffer.from(str, "utf-8");
-    expect(fnv1aHashBytes(buf, 0, buf.length)).toBe(fnv1aHash(str));
-  });
-
-  test("matches fnv1aHash for multi-byte UTF-8", () => {
-    const str = "日本語";
-    const buf = Buffer.from(str, "utf-8");
-    expect(fnv1aHashBytes(buf, 0, buf.length)).toBe(fnv1aHash(str));
-  });
-
-  test("matches fnv1aHash for emoji (surrogate pairs)", () => {
-    const str = "🎉🚀";
-    const buf = Buffer.from(str, "utf-8");
-    expect(fnv1aHashBytes(buf, 0, buf.length)).toBe(fnv1aHash(str));
-  });
-
-  test("works on buffer slice (start != 0)", () => {
-    const buf = Buffer.from("hello world", "utf-8");
-    expect(fnv1aHashBytes(buf, 0, 5)).toBe(fnv1aHash("hello"));
-  });
-
-  test("empty range produces FNV offset basis", () => {
-    const buf = Buffer.from("hello", "utf-8");
-    expect(fnv1aHashBytes(buf, 0, 0)).toBe(FNV_OFFSET_BASIS);
-  });
-});
 
 let testDir: string;
 
@@ -47,86 +18,6 @@ afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 
-describe("streamByteLines", () => {
-  async function collect(filePath: string): Promise<ByteLine[]> {
-    const lines: ByteLine[] = [];
-    for await (const line of streamByteLines(filePath)) {
-      lines.push(line);
-    }
-    return lines;
-  }
-
-  test("yields lines from LF file with trailing newline", async () => {
-    const f = join(testDir, "lf.txt");
-    writeFileSync(f, "line 1\nline 2\nline 3\n");
-    const lines = await collect(f);
-    expect(lines).toHaveLength(3);
-    expect(lines[0].lineBytes.toString()).toBe("line 1");
-    expect(lines[0].eolBytes.toString()).toBe("\n");
-    expect(lines[0].lineNumber).toBe(1);
-    expect(lines[2].lineBytes.toString()).toBe("line 3");
-    expect(lines[2].eolBytes.toString()).toBe("\n");
-    expect(lines[2].lineNumber).toBe(3);
-  });
-
-  test("yields lines from CRLF file", async () => {
-    const f = join(testDir, "crlf.txt");
-    writeFileSync(f, "line 1\r\nline 2\r\n");
-    const lines = await collect(f);
-    expect(lines).toHaveLength(2);
-    expect(lines[0].lineBytes.toString()).toBe("line 1");
-    expect(lines[0].eolBytes.toString()).toBe("\r\n");
-    expect(lines[1].lineBytes.toString()).toBe("line 2");
-    expect(lines[1].eolBytes.toString()).toBe("\r\n");
-  });
-
-  test("handles file without trailing newline", async () => {
-    const f = join(testDir, "no-trail.txt");
-    writeFileSync(f, "line 1\nline 2");
-    const lines = await collect(f);
-    expect(lines).toHaveLength(2);
-    expect(lines[0].eolBytes.toString()).toBe("\n");
-    expect(lines[1].lineBytes.toString()).toBe("line 2");
-    expect(lines[1].eolBytes.length).toBe(0);
-  });
-
-  test("handles bare CR as line ending", async () => {
-    const f = join(testDir, "cr.txt");
-    writeFileSync(f, "line 1\rline 2\r");
-    const lines = await collect(f);
-    expect(lines).toHaveLength(2);
-    expect(lines[0].lineBytes.toString()).toBe("line 1");
-    expect(lines[0].eolBytes.toString()).toBe("\r");
-    expect(lines[1].lineBytes.toString()).toBe("line 2");
-  });
-
-  test("handles mixed EOL styles", async () => {
-    const f = join(testDir, "mixed.txt");
-    writeFileSync(f, "line 1\nline 2\r\nline 3\n");
-    const lines = await collect(f);
-    expect(lines).toHaveLength(3);
-    expect(lines[0].eolBytes.toString()).toBe("\n");
-    expect(lines[1].eolBytes.toString()).toBe("\r\n");
-    expect(lines[2].eolBytes.toString()).toBe("\n");
-  });
-
-  test("yields nothing for empty file", async () => {
-    const f = join(testDir, "empty.txt");
-    writeFileSync(f, "");
-    const lines = await collect(f);
-    expect(lines).toHaveLength(0);
-  });
-
-  test("single line no newline", async () => {
-    const f = join(testDir, "single.txt");
-    writeFileSync(f, "only line");
-    const lines = await collect(f);
-    expect(lines).toHaveLength(1);
-    expect(lines[0].lineBytes.toString()).toBe("only line");
-    expect(lines[0].eolBytes.length).toBe(0);
-    expect(lines[0].lineNumber).toBe(1);
-  });
-});
 
 describe("validateEdits", () => {
   test("accepts valid single replace edit", () => {

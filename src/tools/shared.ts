@@ -26,7 +26,7 @@ export interface EditInput {
 
 type ValidatePathOk = { ok: true; resolvedPath: string; size: number; mtimeMs: number };
 type ValidatePathErr = { ok: false; error: ToolResult };
-export type ValidatePathResult = ValidatePathOk | ValidatePathErr;
+type ValidatePathResult = ValidatePathOk | ValidatePathErr;
 
 /**
  * Validate and resolve a file path without reading its content.
@@ -161,7 +161,7 @@ type ValidateEditsOk = {
   checksumRefs: ChecksumRef[];
 };
 type ValidateEditsErr = { ok: false; error: ToolResult };
-export type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
+type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
 
 /**
  * Validate edit inputs without reading file content.

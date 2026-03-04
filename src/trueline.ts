@@ -74,26 +74,11 @@ export function formatChecksum(startLine: number, endLine: number, hash: number)
   return `${startLine}-${endLine}:${hash.toString(16).padStart(8, "0")}`;
 }
 
-/**
- * Compute 2-letter content hash for a line.
- *
- * Maps FNV-1a output to two lowercase ASCII letters (676 possible values).
- * Matches the vscode-hashline-edit-tool spec:
- *   letter1 = (hash_value % 26) → 'a'..'z'
- *   letter2 = ((hash_value >> 8) % 26) → 'a'..'z'
- */
-export function lineHash(line: string): string {
-  const h = fnv1aHash(line);
-  const c1 = String.fromCharCode(97 + (h % 26));
-  const c2 = String.fromCharCode(97 + ((h >>> 8) % 26));
-  return c1 + c2;
-}
-
 // ==============================================================================
 // Parsing
 // ==============================================================================
 
-export interface LineRef {
+interface LineRef {
   line: number;
   hash: string;
 }
@@ -104,7 +89,7 @@ export interface LineRef {
  * Special case: "0:" is valid (insert at file start, empty hash).
  * Throws on invalid format.
  */
-export function parseLineHash(ref: string): LineRef {
+function parseLineHash(ref: string): LineRef {
   const colonIdx = ref.indexOf(":");
   if (colonIdx === -1) {
     throw new Error(`Invalid line:hash reference "${ref}" — missing colon`);
@@ -144,7 +129,7 @@ export function parseLineHash(ref: string): LineRef {
   return { line, hash };
 }
 
-export interface RangeRef {
+interface RangeRef {
   start: LineRef;
   end: LineRef;
 }
@@ -251,81 +236,3 @@ export function parseChecksum(checksum: string): ChecksumRef {
   return { startLine, endLine, hash };
 }
 
-// ==============================================================================
-// Edit Application
-// ==============================================================================
-
-export interface EditOp {
-  startLine: number; // 1-based (0 for insertAfter at file start)
-  endLine: number; // 1-based, inclusive
-  content: string[]; // array of lines, no EOL chars
-  insertAfter: boolean;
-}
-
-/**
- * Apply a batch of edits to a single file.
- *
- * Edits are sorted by line number descending so that earlier line
- * numbers remain valid as later lines are modified. Returns the
- * new lines array — callers join with the appropriate EOL for their
- * context (file write vs diff preview).
- *
- * Uses `slice().concat()` instead of `splice(...spread)` to avoid
- * V8's ~65 536 function-argument limit when inserting large blocks.
- *
- * @param fileLines - Current file lines (0-indexed array)
- * @param ops - Parsed and verified edit operations
- * @returns New file lines array
- */
-export function applyEdits(fileLines: string[], ops: EditOp[]): string[] {
-  // Sort descending by start line so edits don't shift earlier positions.
-  // For insertAfter ops at the same anchor, reverse their sub-order so that
-  // when applied back-to-front each new block lands after the anchor but
-  // before the previously inserted block — preserving input order in the
-  // final file.
-  //
-  // The comparator is stable because we break ties with the original input
-  // index, avoiding undefined behavior from a non-transitive comparator.
-  const indexed = ops.map((op, i) => ({ op, i }));
-  indexed.sort((a, b) => {
-    const aLine = a.op.startLine;
-    const bLine = b.op.startLine;
-    if (bLine !== aLine) return bLine - aLine;
-    // Same anchor: insertAfter ops go before replace ops in back-to-front pass
-    if (a.op.insertAfter !== b.op.insertAfter) return a.op.insertAfter ? -1 : 1;
-    // Both insertAfter: reverse input order so they appear in input order after insertion
-    if (a.op.insertAfter) return b.i - a.i;
-    return a.i - b.i;
-  });
-  const sorted = indexed.map((x) => x.op);
-
-  let result = fileLines.slice();
-
-  for (const op of sorted) {
-    // Copy to avoid mutating the input when the dedup logic trims trailing blanks.
-    const newLines = [...op.content];
-
-    if (op.insertAfter) {
-      const afterLine = op.startLine; // 0-based insert index
-      // Avoid double blank lines: if inserted content ends with an empty
-      // line and the next existing line is also empty, drop the trailing
-      // empty element to prevent a doubled gap.
-      if (
-        newLines.length > 1 &&
-        newLines[newLines.length - 1] === "" &&
-        afterLine < result.length &&
-        result[afterLine] === ""
-      ) {
-        newLines.pop();
-      }
-      // Use concat instead of splice(...spread) to avoid V8 argument limit
-      result = result.slice(0, afterLine).concat(newLines, result.slice(afterLine));
-    } else {
-      const firstIdx = op.startLine - 1;
-      const span = op.endLine - op.startLine + 1;
-      result = result.slice(0, firstIdx).concat(newLines, result.slice(firstIdx + span));
-    }
-  }
-
-  return result;
-}

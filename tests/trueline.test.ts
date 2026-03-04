@@ -1,13 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
   fnv1aHash,
-  lineHash,
-  parseLineHash,
   parseRange,
   parseChecksum,
-  applyEdits,
 } from "../src/trueline.ts";
-import { rangeChecksum } from "./helpers.ts";
+import { lineHash, rangeChecksum } from "./helpers.ts";
 
 describe("fnv1aHash", () => {
   test("empty string produces FNV offset basis", () => {
@@ -78,41 +75,6 @@ describe("rangeChecksum", () => {
   });
 });
 
-describe("parseLineHash", () => {
-  test("parses valid reference", () => {
-    const ref = parseLineHash("4:mp");
-    expect(ref).toEqual({ line: 4, hash: "mp" });
-  });
-
-  test("parses zero-line insert reference", () => {
-    const ref = parseLineHash("0:");
-    expect(ref).toEqual({ line: 0, hash: "" });
-  });
-
-  test("throws when line 0 has non-empty hash", () => {
-    expect(() => parseLineHash("0:ab")).toThrow("line 0 must have empty hash");
-  });
-
-  test("throws on missing colon", () => {
-    expect(() => parseLineHash("4mp")).toThrow("missing colon");
-  });
-
-  test("throws on invalid hash", () => {
-    expect(() => parseLineHash("4:M")).toThrow("2 lowercase letters");
-  });
-
-  test("throws on negative line", () => {
-    expect(() => parseLineHash("-1:ab")).toThrow("non-negative integer");
-  });
-
-  test("throws on bare colon (empty line number)", () => {
-    expect(() => parseLineHash(":")).toThrow("non-negative integer");
-  });
-
-  test("throws on whitespace before colon", () => {
-    expect(() => parseLineHash(" :ab")).toThrow("non-negative integer");
-  });
-});
 
 describe("parseRange", () => {
   test("parses valid range", () => {
@@ -181,58 +143,3 @@ describe("parseChecksum", () => {
   });
 });
 
-describe("applyEdits", () => {
-  test("replaces a range of lines", () => {
-    const lines = ["a", "b", "c", "d"];
-    const result = applyEdits(lines, [
-      { startLine: 2, endLine: 3, content: ["x", "y"], insertAfter: false },
-    ]);
-    expect(result).toEqual(["a", "x", "y", "d"]);
-  });
-
-  test("inserts after a line", () => {
-    const lines = ["a", "b", "c"];
-    const result = applyEdits(lines, [
-      { startLine: 1, endLine: 1, content: ["new"], insertAfter: true },
-    ]);
-    expect(result).toEqual(["a", "new", "b", "c"]);
-  });
-
-  test("deletes lines when content is empty", () => {
-    const lines = ["a", "b", "c"];
-    const result = applyEdits(lines, [
-      { startLine: 2, endLine: 2, content: [], insertAfter: false },
-    ]);
-    expect(result).toEqual(["a", "c"]);
-  });
-
-  test("multiple insertAfter at same anchor appear in input order", () => {
-    const lines = ["anchor", "next"];
-    const result = applyEdits(lines, [
-      { startLine: 1, endLine: 1, content: ["first"], insertAfter: true },
-      { startLine: 1, endLine: 1, content: ["second"], insertAfter: true },
-      { startLine: 1, endLine: 1, content: ["third"], insertAfter: true },
-    ]);
-    expect(result).toEqual(["anchor", "first", "second", "third", "next"]);
-  });
-
-  test("handles multiple edits in correct order", () => {
-    const lines = ["a", "b", "c", "d"];
-    const result = applyEdits(lines, [
-      { startLine: 1, endLine: 1, content: ["A"], insertAfter: false },
-      { startLine: 4, endLine: 4, content: ["D"], insertAfter: false },
-    ]);
-    expect(result).toEqual(["A", "b", "c", "D"]);
-  });
-
-  test("handles insertion of more than 65K lines without crashing", () => {
-    const lines = ["before", "after"];
-    const bigContent = Array.from({ length: 70_000 }, (_, i) => `line ${i}`);
-    const result = applyEdits(lines, [
-      { startLine: 1, endLine: 1, content: bigContent, insertAfter: true },
-    ]);
-    expect(result.length).toBe(70_002);
-    expect(result[0]).toBe("before");
-    expect(result[70_001]).toBe("after");
-  });
-});
