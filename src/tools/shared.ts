@@ -6,7 +6,7 @@ import {
   type ChecksumRef,
 } from "../parse.ts";
 import { readToolDenyPatterns, evaluateFilePath } from "../security.ts";
-import { type ToolResult } from "./types.ts";
+import { type ToolResult, errorResult } from "./types.ts";
 
 // ==============================================================================
 // Shared input type used by both edit and diff tools
@@ -49,43 +49,26 @@ export async function validatePath(
   try {
     realPath = await realpath(resolvedPath);
   } catch {
-    return {
-      ok: false,
-      error: {
-        content: [{ type: "text", text: `Error reading file: "${file_path}" not found` }],
-        isError: true,
-      },
-    };
+    return { ok: false, error: errorResult(`Error reading file: "${file_path}" not found`) };
   }
 
   // Reject directories, symlinks to directories, and special files (devices,
   // FIFOs, sockets). Only regular files are safe to read and write.
   const fileStat = await stat(realPath);
   if (!fileStat.isFile()) {
-    return {
-      ok: false,
-      error: {
-        content: [{ type: "text", text: `"${file_path}" is not a regular file` }],
-        isError: true,
-      },
-    };
+    return { ok: false, error: errorResult(`"${file_path}" is not a regular file`) };
   }
 
   const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
   if (fileStat.size > MAX_FILE_BYTES) {
     return {
       ok: false,
-      error: {
-        content: [{
-          type: "text",
-          text: `"${file_path}" is too large (${(fileStat.size / 1024 / 1024).toFixed(1)} MB). ` +
-            `Maximum supported file size is 10 MB.`,
-        }],
-        isError: true,
-      },
+      error: errorResult(
+        `"${file_path}" is too large (${(fileStat.size / 1024 / 1024).toFixed(1)} MB). ` +
+        `Maximum supported file size is 10 MB.`,
+      ),
     };
   }
-
   // Build the list of allowed base directories. projectDir (or cwd) is
   // always included; additional dirs come from the caller (e.g. ~/.claude/,
   // TRUELINE_ALLOWED_DIRS).
@@ -93,50 +76,20 @@ export async function validatePath(
   try {
     realBase = projectDir ? projectDir : await realpath(process.cwd());
   } catch {
-    return {
-      ok: false,
-      error: {
-        content: [{ type: "text", text: "Project directory not found or inaccessible" }],
-        isError: true,
-      },
-    };
+    return { ok: false, error: errorResult("Project directory not found or inaccessible") };
   }
-
   const allBases = [realBase, ...allowedDirs];
   const isContained = allBases.some(
     base => realPath === base || realPath.startsWith(base + sep),
   );
   if (!isContained) {
-    return {
-      ok: false,
-      error: {
-        content: [
-          {
-            type: "text",
-            text: `Access denied: "${file_path}" is outside the project directory`,
-          },
-        ],
-        isError: true,
-      },
-    };
+    return { ok: false, error: errorResult(`Access denied: "${file_path}" is outside the project directory`) };
   }
-
   // Evaluate deny patterns against the real path so symlinks can't bypass them.
   const denyGlobs = await readToolDenyPatterns(toolName, projectDir);
   const { denied, matchedPattern } = evaluateFilePath(realPath, denyGlobs);
   if (denied) {
-    return {
-      ok: false,
-      error: {
-        content: [
-          {
-            type: "text",
-            text: `Access denied: "${file_path}" matched deny pattern "${matchedPattern}"`,
-          },
-        ],
-        isError: true,
-      },
-    };
+    return { ok: false, error: errorResult(`Access denied: "${file_path}" matched deny pattern "${matchedPattern}"`) };
   }
 
   return { ok: true, resolvedPath: realPath, size: fileStat.size, mtimeMs: fileStat.mtimeMs };
@@ -147,15 +100,11 @@ export async function validatePath(
 // Content-free edit validation (for streaming pipeline)
 // ==============================================================================
 
-// Extends EditOp with boundary hashes for streaming verification
-export interface EditOp {
+export interface StreamEditOp {
   startLine: number;
   endLine: number;
   content: string[];
   insertAfter: boolean;
-}
-
-export interface StreamEditOp extends EditOp {
   startHash: string;
   endHash: string;
   checksum: string;
@@ -186,15 +135,8 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
 
     // line 0 only valid for insert_after
     if (rangeRef.start.line === 0 && !edit.insert_after) {
-      return {
-        ok: false,
-        error: {
-          content: [{ type: "text", text: "range starting at line 0 requires insert_after: true" }],
-          isError: true,
-        },
-      };
+      return { ok: false, error: errorResult("range starting at line 0 requires insert_after: true") };
     }
-
     // Parse checksum (validates format)
     const csRef = parseChecksum(edit.checksum);
 
@@ -203,15 +145,11 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
       if (csRef.startLine > rangeRef.start.line || csRef.endLine < rangeRef.end.line) {
         return {
           ok: false,
-          error: {
-            content: [{
-              type: "text",
-              text: `Checksum range ${csRef.startLine}-${csRef.endLine} does not cover ` +
-                `edit range ${rangeRef.start.line}-${rangeRef.end.line}. ` +
-                `Re-read with trueline_read to get a checksum covering the target lines.`,
-            }],
-            isError: true,
-          },
+          error: errorResult(
+            `Checksum range ${csRef.startLine}-${csRef.endLine} does not cover ` +
+            `edit range ${rangeRef.start.line}-${rangeRef.end.line}. ` +
+            `Re-read with trueline_read to get a checksum covering the target lines.`,
+          ),
         };
       }
     }
@@ -239,13 +177,7 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
     if (op.insertAfter) continue;
     for (let l = op.startLine; l <= op.endLine; l++) {
       if (touchedLines.has(l)) {
-        return {
-          ok: false,
-          error: {
-            content: [{ type: "text", text: `Overlapping ranges: line ${l} targeted by multiple edits` }],
-            isError: true,
-          },
-        };
+        return { ok: false, error: errorResult(`Overlapping ranges: line ${l} targeted by multiple edits`) };
       }
       touchedLines.add(l);
     }

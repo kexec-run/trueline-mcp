@@ -15,9 +15,10 @@ import {
   fnv1aHash,
   foldHash,
   formatChecksum,
+  hashToLetters,
 } from "../hash.ts";
 import { validatePath } from "./shared.ts";
-import { type ToolResult } from "./types.ts";
+import { type ToolResult, errorResult, textResult } from "./types.ts";
 
 interface ReadParams {
   file_path: string;
@@ -29,7 +30,6 @@ interface ReadParams {
 
 /**
  * Stream lines from a file, treating \r\n, \r, and \n as line endings.
- * (\r\n, \r, and \n are all line endings).
  *
  * Yields one string per line with no trailing EOL characters.  Handles
  * \r\n pairs split across chunk boundaries.
@@ -99,16 +99,10 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   const start = start_line ?? 1;
   if (start < 1) {
-    return {
-      content: [{ type: "text", text: `start_line ${start} must be >= 1` }],
-      isError: true,
-    };
+    return errorResult(`start_line ${start} must be >= 1`);
   }
   if (end_line !== undefined && end_line < start) {
-    return {
-      content: [{ type: "text", text: `end_line ${end_line} must be >= start_line ${start}` }],
-      isError: true,
-    };
+    return errorResult(`end_line ${end_line} must be >= start_line ${start}`);
   }
 
   const end = end_line ?? Infinity;
@@ -122,10 +116,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
     // Binary detection: null bytes indicate non-text content.
     if (line.includes("\0")) {
-      return {
-        content: [{ type: "text", text: `"${file_path}" appears to be a binary file` }],
-        isError: true,
-      };
+      return errorResult(`"${file_path}" appears to be a binary file`);
     }
 
     if (lineNo < start) continue;
@@ -135,25 +126,19 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     const h = fnv1aHash(line);
     checksumHash = foldHash(checksumHash, h);
 
-    // Format trueline: "lineNo:ab|content"
-    const c1 = String.fromCharCode(97 + (h % 26));
-    const c2 = String.fromCharCode(97 + ((h >>> 8) % 26));
-    outputParts.push(`${lineNo}:${c1}${c2}|${line}`);
+    outputParts.push(`${lineNo}:${hashToLetters(h)}|${line}`);
   }
 
   // Empty file
   if (lineNo === 0) {
-    return { content: [{ type: "text", text: `(empty file)\n\nchecksum: ${EMPTY_FILE_CHECKSUM}` }] };
+    return textResult(`(empty file)\n\nchecksum: ${EMPTY_FILE_CHECKSUM}`);
   }
 
   // start_line out of range
   if (start > lineNo) {
-    return {
-      content: [{ type: "text", text: `start_line ${start} out of range (file has ${lineNo} lines)` }],
-      isError: true,
-    };
+    return errorResult(`start_line ${start} out of range (file has ${lineNo} lines)`);
   }
 
   const checksum = formatChecksum(start, lastLine, checksumHash);
-  return { content: [{ type: "text", text: `${outputParts.join("\n")}\n\nchecksum: ${checksum}` }] };
+  return textResult(`${outputParts.join("\n")}\n\nchecksum: ${checksum}`);
 }

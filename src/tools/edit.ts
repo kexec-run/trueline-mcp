@@ -10,7 +10,7 @@
 // The file is never loaded into memory as a whole.
 // ==============================================================================
 
-import { type ToolResult } from "./types.ts";
+import { type ToolResult, errorResult, textResult } from "./types.ts";
 import { validatePath, validateEdits, type EditInput } from "./shared.ts";
 import { streamingEdit } from "../streaming-edit.ts";
 
@@ -36,25 +36,12 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs);
 
   if (!result.ok) {
-    return {
-      content: [{ type: "text", text: result.error }],
-      isError: true,
-    };
+    return errorResult(result.error);
   }
 
   if (!result.changed) {
-    return {
-      content: [{
-        type: "text",
-        text: `Edit produced no changes \u2014 file not written.\n\nchecksum: ${result.newChecksum}`,
-      }],
-    };
+    return textResult(`Edit produced no changes \u2014 file not written.\n\nchecksum: ${result.newChecksum}`);
   }
 
-  return {
-    content: [{
-      type: "text",
-      text: `Edit applied successfully. (${(performance.now() - t0).toFixed(0)}ms)\n\nchecksum: ${result.newChecksum}`,
-    }],
-  };
+  return textResult(`Edit applied successfully. (${(performance.now() - t0).toFixed(0)}ms)\n\nchecksum: ${result.newChecksum}`);
 }

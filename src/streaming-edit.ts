@@ -22,9 +22,10 @@
 
 import { createReadStream, createWriteStream } from "node:fs";
 import { stat, rename, chmod, unlink } from "node:fs/promises";
+import { finished } from "node:stream/promises";
 import { dirname, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import { FNV_OFFSET_BASIS, FNV_PRIME, EMPTY_FILE_CHECKSUM, foldHash, formatChecksum } from "./hash.ts";
+import { FNV_OFFSET_BASIS, FNV_PRIME, EMPTY_FILE_CHECKSUM, foldHash, formatChecksum, hashToLetters } from "./hash.ts";
 import type { ChecksumRef } from "./parse.ts";
 import type { StreamEditOp } from "./tools/shared.ts";
 
@@ -175,18 +176,6 @@ type StreamingEditResult =
   | { ok: true; newChecksum: string; changed: boolean; tmpPath?: string }
   | { ok: false; error: string };
 
-/**
- * Convert a line's FNV-1a hash to the 2-letter hash used in line references.
- *
- * Maps FNV-1a output to two lowercase ASCII letters (676 possible values).
- * Operates on a precomputed numeric hash rather than a string, avoiding
- * redundant UTF-8 encoding.
- */
-function hashToLetters(h: number): string {
-  const c1 = String.fromCharCode(97 + (h % 26));
-  const c2 = String.fromCharCode(97 + ((h >>> 8) % 26));
-  return c1 + c2;
-}
 
 function buffersEqual(a: Buffer[], b: Buffer[]): boolean {
   if (a.length !== b.length) return false;
@@ -247,8 +236,8 @@ export async function streamingEdit(
   const tmpPath = resolve(dir, tmpName);
   const outStream = createWriteStream(tmpPath);
 
-  // Capture write errors eagerly — if the error listener is only attached at
-  // stream end, errors emitted during streaming (e.g. disk full) are missed.
+  // Single error listener — `drain()` checks this during streaming, and
+  // `finished()` surfaces errors during `end()`.
   let writeError: Error | null = null;
   outStream.on("error", (err) => { writeError = err; });
 
@@ -481,17 +470,14 @@ export async function streamingEdit(
     }
   }
 
-  // Check for errors captured during streaming before finishing
-  if (writeError) {
+  // Finish writing — `finished()` resolves on 'finish', rejects on 'error'.
+  outStream.end();
+  try {
+    await finished(outStream);
+  } catch (err) {
     await cleanupTmp();
-    throw writeError;
+    throw err;
   }
-
-  // Finish writing — error listener already attached at stream creation
-  await new Promise<void>((res, rej) => {
-    outStream.on("error", rej);
-    outStream.end(() => res());
-  });
 
   // ---- Verify checksum accumulators ----
   for (const acc of csAccs) {

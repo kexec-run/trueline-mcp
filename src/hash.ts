@@ -72,3 +72,13 @@ export function foldHash(accumulator: number, h: number): number {
 export function formatChecksum(startLine: number, endLine: number, hash: number): string {
   return `${startLine}-${endLine}:${hash.toString(16).padStart(8, "0")}`;
 }
+
+/**
+ * Map an FNV-1a hash to a two-lowercase-letter tag (676 possible values).
+ * Used in the `lineNumber:ab|content` format returned by `trueline_read`.
+ */
+export function hashToLetters(h: number): string {
+  const c1 = String.fromCharCode(97 + (h % 26));
+  const c2 = String.fromCharCode(97 + ((h >>> 8) % 26));
+  return c1 + c2;
+}

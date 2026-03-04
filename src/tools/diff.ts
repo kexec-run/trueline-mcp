@@ -1,7 +1,7 @@
 import { readFile, unlink } from "node:fs/promises";
 import { relative } from "node:path";
 import { createTwoFilesPatch } from "diff";
-import { type ToolResult } from "./types.ts";
+import { type ToolResult, errorResult, textResult } from "./types.ts";
 import { validatePath, validateEdits, type EditInput } from "./shared.ts";
 import { streamingEdit } from "../streaming-edit.ts";
 
@@ -29,10 +29,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, true);
 
   if (!result.ok) {
-    return {
-      content: [{ type: "text", text: result.error }],
-      isError: true,
-    };
+    return errorResult(result.error);
   }
 
   // Use the resolved path relative to the project root so diff headers
@@ -54,9 +51,7 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
       newStr,
     );
 
-    return {
-      content: [{ type: "text", text: diff }],
-    };
+    return textResult(diff);
   } finally {
     try { await unlink(result.tmpPath!); } catch { /* best-effort */ }
   }
