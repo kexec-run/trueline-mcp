@@ -3,7 +3,7 @@ import {
   foldHash,
   fnv1aHash,
   formatChecksum,
-} from "../src/trueline.ts";
+} from "../src/hash.ts";
 
 /**
  * Compute a read-range checksum over a slice of file lines.

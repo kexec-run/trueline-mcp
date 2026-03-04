@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import {
-  fnv1aHash,
-  parseRange,
-  parseChecksum,
-} from "../src/trueline.ts";
+import { fnv1aHash } from "../src/hash.ts";
+import { parseRange, parseChecksum } from "../src/parse.ts";
 import { lineHash, rangeChecksum } from "./helpers.ts";
 
 describe("fnv1aHash", () => {

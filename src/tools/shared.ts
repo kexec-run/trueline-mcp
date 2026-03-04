@@ -3,9 +3,8 @@ import { resolve, sep } from "node:path";
 import {
   parseRange,
   parseChecksum,
-  type EditOp,
   type ChecksumRef,
-} from "../trueline.ts";
+} from "../parse.ts";
 import { readToolDenyPatterns, evaluateFilePath } from "../security.ts";
 import { type ToolResult } from "./types.ts";
 
@@ -149,6 +148,13 @@ export async function validatePath(
 // ==============================================================================
 
 // Extends EditOp with boundary hashes for streaming verification
+export interface EditOp {
+  startLine: number;
+  endLine: number;
+  content: string[];
+  insertAfter: boolean;
+}
+
 export interface StreamEditOp extends EditOp {
   startHash: string;
   endHash: string;

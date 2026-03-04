@@ -24,8 +24,8 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { stat, rename, chmod, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import { FNV_OFFSET_BASIS, FNV_PRIME, EMPTY_FILE_CHECKSUM, foldHash, formatChecksum } from "./trueline.ts";
-import type { ChecksumRef } from "./trueline.ts";
+import { FNV_OFFSET_BASIS, FNV_PRIME, EMPTY_FILE_CHECKSUM, foldHash, formatChecksum } from "./hash.ts";
+import type { ChecksumRef } from "./parse.ts";
 import type { StreamEditOp } from "./tools/shared.ts";
 
 /**

@@ -15,7 +15,7 @@ import {
   fnv1aHash,
   foldHash,
   formatChecksum,
-} from "../trueline.ts";
+} from "../hash.ts";
 import { validatePath } from "./shared.ts";
 import { type ToolResult } from "./types.ts";
 
