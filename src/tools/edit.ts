@@ -22,6 +22,7 @@ interface EditParams {
 }
 
 export async function handleEdit(params: EditParams): Promise<ToolResult> {
+  const t0 = performance.now();
   const { file_path, edits, projectDir, allowedDirs } = params;
 
   const validated = await validatePath(file_path, "Edit", projectDir, allowedDirs);
@@ -53,7 +54,7 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   return {
     content: [{
       type: "text",
-      text: `Edit applied successfully.\n\nchecksum: ${result.newChecksum}`,
+      text: `Edit applied successfully. (${(performance.now() - t0).toFixed(0)}ms)\n\nchecksum: ${result.newChecksum}`,
     }],
   };
 }
