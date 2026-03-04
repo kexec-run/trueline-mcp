@@ -187,6 +187,14 @@ function hashToLetters(h: number): string {
   return c1 + c2;
 }
 
+function buffersEqual(a: Buffer[], b: Buffer[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!a[i].equals(b[i])) return false;
+  }
+  return true;
+}
+
 /**
  * Single-pass byte-level streaming edit engine.
  *
@@ -286,13 +294,45 @@ export async function streamingEdit(
     await enqueueLine(Buffer.from(s, "utf-8"));
   }
 
+  async function cleanupTmp(): Promise<void> {
+    outStream.destroy();  // harmless no-op if already ended
+    try { await unlink(tmpPath); } catch { /* best-effort */ }
+  }
+
+  async function fail(error: string): Promise<StreamingEditResult> {
+    await cleanupTmp();
+    return { ok: false, error };
+  }
+
+  async function writeContentLines(content: string[]): Promise<void> {
+    for (const line of content) await enqueueString(line);
+  }
+
+  async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[]): Promise<void> {
+    const replacementBufs = op.content.map(s => Buffer.from(s, "utf-8"));
+    if (buffersEqual(replacementBufs, origBytes)) {
+      for (const buf of origBytes) await enqueueLine(buf);
+    } else {
+      contentChanged = true;
+      await writeContentLines(op.content);
+    }
+  }
+
+  function outputChecksumStr(): string {
+    return outputLineCount > 0
+      ? formatChecksum(1, outputLineCount, outputChecksumAcc)
+      : EMPTY_FILE_CHECKSUM;
+  }
+
+  function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
+    return `Hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}`;
+  }
+
   // ---- Handle line-0 insert_after (prepend) before streaming ----
   const line0Ops = opsByStartLine.get(0);
   if (line0Ops) {
     for (const op of line0Ops) {
-      for (const line of op.content) {
-        await enqueueString(line);
-      }
+      await writeContentLines(op.content);
     }
     contentChanged = true;
     opsByStartLine.delete(0);
@@ -307,9 +347,7 @@ export async function streamingEdit(
       // Binary detection: null byte in line content
       for (let i = 0; i < lineBytes.length; i++) {
         if (lineBytes[i] === 0x00) {
-          outStream.destroy();
-          try { await unlink(tmpPath); } catch { /* best-effort */ }
-          return { ok: false, error: "File appears to be binary (contains null bytes)" };
+          return await fail("File appears to be binary (contains null bytes)");
         }
       }
 
@@ -335,12 +373,7 @@ export async function streamingEdit(
         // Verify end boundary hash
         if (lineNumber === activeReplace.endLine && activeReplace.endHash !== "") {
           if (letters !== activeReplace.endHash) {
-            outStream.destroy();
-            try { await unlink(tmpPath); } catch { /* best-effort */ }
-            return {
-              ok: false,
-              error: `Hash mismatch at line ${lineNumber}: expected ${activeReplace.endHash}, got ${letters}`,
-            };
+            return await fail(hashMismatchMsg(lineNumber, activeReplace.endHash, letters));
           }
         }
 
@@ -351,29 +384,7 @@ export async function streamingEdit(
           const op = activeReplace;
           activeReplace = null;
 
-          // No-op detection: compare replacement with original
-          const replacementBufs = op.content.map(s => Buffer.from(s, "utf-8"));
-          let isNoop = replacementBufs.length === activeReplaceOrigBytes.length;
-          if (isNoop) {
-            for (let i = 0; i < replacementBufs.length; i++) {
-              if (!replacementBufs[i].equals(activeReplaceOrigBytes[i])) {
-                isNoop = false;
-                break;
-              }
-            }
-          }
-
-          if (isNoop) {
-            // Write original bytes unchanged
-            for (const origBuf of activeReplaceOrigBytes) {
-              await enqueueLine(origBuf);
-            }
-          } else {
-            contentChanged = true;
-            for (const line of op.content) {
-              await enqueueString(line);
-            }
-          }
+          await writeReplaceOrOriginal(op, activeReplaceOrigBytes);
 
           activeReplaceOrigBytes = [];
 
@@ -383,9 +394,7 @@ export async function streamingEdit(
             for (const iaOp of opsAtLine) {
               if (iaOp.insertAfter) {
                 contentChanged = true;
-                for (const line of iaOp.content) {
-                  await enqueueString(line);
-                }
+                await writeContentLines(iaOp.content);
               }
             }
           }
@@ -411,34 +420,17 @@ export async function streamingEdit(
         if (replaceOp) {
           // Verify start boundary hash
           if (replaceOp.startHash !== "" && letters !== replaceOp.startHash) {
-            outStream.destroy();
-            try { await unlink(tmpPath); } catch { /* best-effort */ }
-            return {
-              ok: false,
-              error: `Hash mismatch at line ${lineNumber}: expected ${replaceOp.startHash}, got ${letters}`,
-            };
+            return await fail(hashMismatchMsg(lineNumber, replaceOp.startHash, letters));
           }
 
           if (replaceOp.startLine === replaceOp.endLine) {
             // Single-line replace: handle immediately
-            const replacementBufs = replaceOp.content.map(s => Buffer.from(s, "utf-8"));
-            let isNoop = replacementBufs.length === 1 && replacementBufs[0].equals(lineBytes);
-
-            if (isNoop) {
-              await enqueueLine(lineBytes);
-            } else {
-              contentChanged = true;
-              for (const line of replaceOp.content) {
-                await enqueueString(line);
-              }
-            }
+            await writeReplaceOrOriginal(replaceOp, [lineBytes]);
 
             // Process insert_after ops at this line
             for (const iaOp of insertOps) {
               contentChanged = true;
-              for (const line of iaOp.content) {
-                await enqueueString(line);
-              }
+              await writeContentLines(iaOp.content);
             }
           } else {
             // Multi-line replace: enter active replace mode
@@ -455,12 +447,7 @@ export async function streamingEdit(
           // Verify boundary hash for insert_after ops
           for (const iaOp of insertOps) {
             if (iaOp.startHash !== "" && letters !== iaOp.startHash) {
-              outStream.destroy();
-              try { await unlink(tmpPath); } catch { /* best-effort */ }
-              return {
-                ok: false,
-                error: `Hash mismatch at line ${lineNumber}: expected ${iaOp.startHash}, got ${letters}`,
-              };
+              return await fail(hashMismatchMsg(lineNumber, iaOp.startHash, letters));
             }
           }
 
@@ -468,9 +455,7 @@ export async function streamingEdit(
 
           for (const iaOp of insertOps) {
             contentChanged = true;
-            for (const line of iaOp.content) {
-              await enqueueString(line);
-            }
+            await writeContentLines(iaOp.content);
           }
         }
       } else {
@@ -479,8 +464,7 @@ export async function streamingEdit(
       }
     }
   } catch (err) {
-    outStream.destroy();
-    try { await unlink(tmpPath); } catch { /* best-effort */ }
+    await cleanupTmp();
     throw err;
   }
 
@@ -497,8 +481,7 @@ export async function streamingEdit(
 
   // Check for errors captured during streaming before finishing
   if (writeError) {
-    outStream.destroy();
-    try { await unlink(tmpPath); } catch { /* best-effort */ }
+    await cleanupTmp();
     throw writeError;
   }
 
@@ -513,29 +496,23 @@ export async function streamingEdit(
     // Skip empty-file sentinel
     if (acc.ref.startLine === 0 && acc.ref.endLine === 0) {
       if (totalLines !== 0) {
-        try { await unlink(tmpPath); } catch { /* best-effort */ }
-        return {
-          ok: false,
-          error: `Checksum mismatch: expected empty file but file has ${totalLines} lines`,
-        };
+        return await fail(`Checksum mismatch: expected empty file but file has ${totalLines} lines`);
       }
       continue;
     }
 
     // Check if checksum range exceeds file length
     if (acc.ref.endLine > totalLines) {
-      try { await unlink(tmpPath); } catch { /* best-effort */ }
-      return {
-        ok: false,
-        error: `Checksum range ${acc.ref.startLine}-${acc.ref.endLine} exceeds ` +
-          `file length (${totalLines} lines)`,
-      };
+      return await fail(
+        `Checksum range ${acc.ref.startLine}-${acc.ref.endLine} exceeds ` +
+        `file length (${totalLines} lines)`,
+      );
     }
 
     const expected = acc.ref.hash;
     const actual = acc.hash.toString(16).padStart(8, "0");
     if (actual !== expected) {
-      try { await unlink(tmpPath); } catch { /* best-effort */ }
+      await cleanupTmp();
 
       // If we reached post-stream checksum verification, all boundary
       // hashes passed during the stream.  That means the edit-target
@@ -573,11 +550,8 @@ export async function streamingEdit(
 
   // ---- No-op: skip write if nothing changed ----
   if (!contentChanged) {
-    try { await unlink(tmpPath); } catch { /* best-effort */ }
-    const checksumStr = outputLineCount > 0
-      ? formatChecksum(1, outputLineCount, outputChecksumAcc)
-      : EMPTY_FILE_CHECKSUM;
-    return { ok: true, newChecksum: checksumStr, changed: false };
+    await cleanupTmp();
+    return { ok: true, newChecksum: outputChecksumStr(), changed: false };
   }
 
   // ---- Atomic rename with mtime check ----
@@ -586,11 +560,7 @@ export async function streamingEdit(
     const fileStat = await stat(resolvedPath);
     originalMode = fileStat.mode;
     if (fileStat.mtimeMs !== mtimeMs) {
-      try { await unlink(tmpPath); } catch { /* best-effort */ }
-      return {
-        ok: false,
-        error: "File was modified by another process. Re-read with trueline_read.",
-      };
+      return await fail("File was modified by another process. Re-read with trueline_read.");
     }
   } catch {
     // stat failed (file deleted?) — proceed with rename
@@ -602,12 +572,9 @@ export async function streamingEdit(
     }
     await rename(tmpPath, resolvedPath);
   } catch (err) {
-    try { await unlink(tmpPath); } catch { /* best-effort */ }
+    await cleanupTmp();
     throw err;
   }
 
-  const checksumStr = outputLineCount > 0
-    ? formatChecksum(1, outputLineCount, outputChecksumAcc)
-    : EMPTY_FILE_CHECKSUM;
-  return { ok: true, newChecksum: checksumStr, changed: true };
+  return { ok: true, newChecksum: outputChecksumStr(), changed: true };
 }
