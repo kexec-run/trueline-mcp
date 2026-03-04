@@ -2,17 +2,12 @@ import { describe, expect, test } from "bun:test";
 import {
   fnv1aHash,
   lineHash,
-  rangeChecksum,
-  formatTruelinesFromArray,
-  formatTruelinesWithHashes,
-  rangeChecksumFromHashes,
   parseLineHash,
   parseRange,
   parseChecksum,
-  verifyChecksum,
-  verifyHashes,
   applyEdits,
 } from "../src/trueline.ts";
+import { rangeChecksum } from "./helpers.ts";
 
 describe("fnv1aHash", () => {
   test("empty string produces FNV offset basis", () => {
@@ -80,19 +75,6 @@ describe("rangeChecksum", () => {
     const cs = rangeChecksum(lines, 1, 10);
     expect(cs).toMatch(/^1-2:[0-9a-f]{8}$/);
     expect(cs).toBe(rangeChecksum(lines, 1, 2));
-  });
-});
-
-describe("formatTruelinesFromArray", () => {
-  test("formats array of lines", () => {
-    const result = formatTruelinesFromArray(["a", "b"], 1);
-    const lines = result.split("\n");
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\|a$/);
-    expect(lines[1]).toMatch(/^2:[a-z]{2}\|b$/);
-  });
-
-  test("returns empty for empty array", () => {
-    expect(formatTruelinesFromArray([])).toBe("");
   });
 });
 
@@ -196,86 +178,6 @@ describe("parseChecksum", () => {
 
   test("rejects scientific notation in end line", () => {
     expect(() => parseChecksum("1-3e1:00000000")).toThrow("decimal integer");
-  });
-});
-
-describe("verifyChecksum", () => {
-  test("returns null for valid checksum", () => {
-    const lines = ["line 1", "line 2", "line 3"];
-    const cs = rangeChecksum(lines, 1, 3);
-    expect(verifyChecksum(lines, cs)).toBeNull();
-  });
-
-  test("returns error for changed content", () => {
-    const lines = ["line 1", "line 2", "line 3"];
-    const cs = rangeChecksum(lines, 1, 3);
-    lines[1] = "changed";
-    const err = verifyChecksum(lines, cs);
-    expect(err).toContain("mismatch");
-  });
-
-  test("returns error when range exceeds file length", () => {
-    const lines = ["only one"];
-    const err = verifyChecksum(lines, "1-5:abcdabcd");
-    expect(err).toContain("exceeds");
-  });
-
-  test("rejects bare hex hash with helpful message including range example", () => {
-    const lines = ["line 1", "line 2", "line 3"];
-    const err = verifyChecksum(lines, "ab80afda");
-    expect(err).toContain("pass the full checksum");
-    expect(err).toContain("1-3:ab80afda");
-  });
-
-  test("returns error (not crash) for crafted 0-0 checksum with non-zero hash", () => {
-    const err = verifyChecksum([], "0-0:abcdef01");
-    expect(typeof err).toBe("string");
-    expect(err).toContain("0-0");
-  });
-});
-
-describe("verifyHashes", () => {
-  test("returns null when all hashes match", () => {
-    const lines = ["hello", "world"];
-    const refs = [
-      { line: 1, hash: lineHash("hello") },
-      { line: 2, hash: lineHash("world") },
-    ];
-    expect(verifyHashes(lines, refs)).toBeNull();
-  });
-
-  test("returns error on hash mismatch", () => {
-    const lines = ["hello", "world"];
-    const refs = [{ line: 1, hash: "zz" }];
-    const err = verifyHashes(lines, refs);
-    expect(err).toContain("mismatch");
-  });
-
-  test("returns error on out-of-range line", () => {
-    const lines = ["hello"];
-    const refs = [{ line: 5, hash: "ab" }];
-    const err = verifyHashes(lines, refs);
-    expect(err).toContain("out of range");
-  });
-
-  test("allows zero-line insert ref", () => {
-    expect(verifyHashes(["hello"], [{ line: 0, hash: "" }])).toBeNull();
-  });
-});
-
-describe("single-pass hashing helpers", () => {
-  test("formatTruelinesWithHashes matches formatTruelinesFromArray", () => {
-    const lines = ["hello", "world", "foo"];
-    const hashes = lines.map(fnv1aHash);
-    expect(formatTruelinesWithHashes(lines, hashes, 1))
-      .toBe(formatTruelinesFromArray(lines, 1));
-  });
-
-  test("rangeChecksumFromHashes matches rangeChecksum", () => {
-    const lines = ["hello", "world", "foo"];
-    const hashes = lines.map(fnv1aHash);
-    expect(rangeChecksumFromHashes(hashes, 1, 3))
-      .toBe(rangeChecksum(lines, 1, 3));
   });
 });
 

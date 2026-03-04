@@ -3,7 +3,8 @@ import { mkdtempSync, realpathSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleDiff } from "../../src/tools/diff.ts";
-import { lineHash, rangeChecksum } from "../../src/trueline.ts";
+import { lineHash } from "../../src/trueline.ts";
+import { rangeChecksum } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;

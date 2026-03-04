@@ -2,7 +2,8 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { fnv1aHash, FNV_OFFSET_BASIS, lineHash, rangeChecksum } from "../src/trueline.ts";
+import { fnv1aHash, FNV_OFFSET_BASIS, lineHash } from "../src/trueline.ts";
+import { rangeChecksum } from "./helpers.ts";
 import { validateEdits } from "../src/tools/shared.ts";
 import { fnv1aHashBytes, streamByteLines, streamingEdit, type ByteLine } from "../src/streaming-edit.ts";
 

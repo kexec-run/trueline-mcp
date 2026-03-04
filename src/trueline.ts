@@ -1,6 +1,3 @@
-import { writeFile, rename, stat, chmod, unlink } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { randomBytes } from "node:crypto";
 
 // ==============================================================================
 // FNV-1a Hash
@@ -9,13 +6,7 @@ import { randomBytes } from "node:crypto";
 export const FNV_OFFSET_BASIS = 2166136261;
 export const FNV_PRIME = 16777619;
 
-/**
- * Sentinel checksum representing an empty file (zero lines).
- *
- * `verifyChecksum` accepts this value when the file has no lines, so
- * callers can use the output of `trueline_read` on an empty file directly
- * as the `checksum` field in a subsequent `trueline_edit` call.
- */
+/** Sentinel checksum representing an empty file (zero lines). */
 export const EMPTY_FILE_CHECKSUM = "0-0:00000000";
 
 /**
@@ -67,8 +58,8 @@ export function fnv1aHash(line: string): number {
  * Fold a 32-bit line hash into a running checksum accumulator.
  *
  * Feeds all 4 bytes of `h` (little-endian) into the FNV-1a accumulator.
- * This is the core building block for `rangeChecksum` and streaming
- * checksum computation in `handleRead`.
+ * This is the core building block for streaming checksum computation
+ * in `handleRead`.
  */
 export function foldHash(accumulator: number, h: number): number {
   accumulator = Math.imul(accumulator ^ (h & 0xff),          FNV_PRIME) >>> 0;
@@ -96,107 +87,6 @@ export function lineHash(line: string): string {
   const c1 = String.fromCharCode(97 + (h % 26));
   const c2 = String.fromCharCode(97 + ((h >>> 8) % 26));
   return c1 + c2;
-}
-
-/**
- * Compute a read-range checksum over a slice of file lines.
- *
- * Feeds each line's full 32-bit FNV-1a hash (4 bytes, little-endian) directly
- * into a second FNV-1a accumulator. Using the full hash rather than the
- * 2-letter `lineHash` proxy doubles the effective entropy per line and makes
- * accidental collisions across similar lines far less likely.
- *
- * `effectiveEnd` clamps `endLine` to `lines.length` so the label in the
- * returned string always reflects the lines that were actually hashed,
- * preventing a mismatch between the label and the hash value when
- * `endLine` exceeds the file length.
- *
- * @param lines - Full file lines array (0-indexed, lines[0] = line 1)
- * @param startLine - 1-based first line of range
- * @param endLine - 1-based last line of range (inclusive)
- * @returns Checksum string: "<startLine>-<effectiveEnd>:<8hex>"
- */
-export function rangeChecksum(
-  lines: string[],
-  startLine: number,
-  endLine: number,
-): string {
-  let hash = FNV_OFFSET_BASIS;
-  const effectiveEnd = Math.min(endLine, lines.length);
-  for (let i = startLine - 1; i < effectiveEnd; i++) {
-    hash = foldHash(hash, fnv1aHash(lines[i]));
-  }
-  return formatChecksum(startLine, effectiveEnd, hash);
-}
-
-/**
- * Compute a range checksum from precomputed FNV-1a hashes.
- *
- * Like `rangeChecksum` but takes a `number[]` of pre-hashed values
- * instead of re-hashing the raw line strings.
- *
- * @param hashes - Array of precomputed FNV-1a hashes (0-indexed)
- * @param startLine - 1-based first line label
- * @param endLine - 1-based last line label (inclusive)
- */
-export function rangeChecksumFromHashes(
-  hashes: number[],
-  startLine: number,
-  endLine: number,
-): string {
-  let hash = FNV_OFFSET_BASIS;
-  for (const h of hashes) {
-    hash = foldHash(hash, h);
-  }
-  return formatChecksum(startLine, endLine, hash);
-}
-
-// ==============================================================================
-// Line Formatting
-// ==============================================================================
-
-/**
- * Format pre-split lines as truelines: `{lineNumber}:{hash}|{content}`
- *
- * Formats each line as `{lineNumber}:{2-letter hash}|{content}`.
- *
- * @param lines - Array of line strings (no trailing newline elements)
- * @param startLine - 1-based line number for the first line (default: 1)
- * @returns Formatted string with one trueline per input line
- */
-export function formatTruelinesFromArray(
-  lines: string[],
-  startLine: number = 1,
-): string {
-  if (lines.length === 0) return "";
-
-  const out = new Array<string>(lines.length);
-  for (let i = 0; i < lines.length; i++) {
-    out[i] = `${startLine + i}:${lineHash(lines[i])}|${lines[i]}`;
-  }
-  return out.join("\n");
-}
-
-/**
- * Format pre-split lines as truelines using precomputed FNV-1a hashes.
- *
- * Like `formatTruelinesFromArray` but avoids recomputing hashes when
- * the caller already has them (e.g., for shared use with checksumming).
- */
-export function formatTruelinesWithHashes(
-  lines: string[],
-  hashes: number[],
-  startLine: number = 1,
-): string {
-  if (lines.length === 0) return "";
-
-  const out = new Array<string>(lines.length);
-  for (let i = 0; i < lines.length; i++) {
-    const c1 = String.fromCharCode(97 + (hashes[i] % 26));
-    const c2 = String.fromCharCode(97 + ((hashes[i] >>> 8) % 26));
-    out[i] = `${startLine + i}:${c1}${c2}|${lines[i]}`;
-  }
-  return out.join("\n");
 }
 
 // ==============================================================================
@@ -361,99 +251,6 @@ export function parseChecksum(checksum: string): ChecksumRef {
   return { startLine, endLine, hash };
 }
 
-/**
- * Verify a checksum string against current file content.
- *
- * Accepts the `EMPTY_FILE_CHECKSUM` sentinel ("0-0:00000000") when the file
- * has zero lines, enabling edits on empty files without special-casing
- * at the call site.
- *
- * Recomputes the range checksum from the current lines and compares.
- * Returns null if valid, or an error message if the file has changed.
- */
-export function verifyChecksum(
-  lines: string[],
-  checksum: string,
-): string | null {
-  if (checksum === EMPTY_FILE_CHECKSUM) {
-    return lines.length === 0
-      ? null
-      : `Checksum mismatch: expected empty file but file has ${lines.length} lines. Re-read with trueline_read.`;
-  }
-
-  // Catch bare hex hashes early with a targeted message. Agents sometimes
-  // strip the "startLine-endLine:" prefix; we can't infer the range
-  // (it might be a partial read) so we ask for the full string instead.
-  if (/^[0-9a-f]{8}$/.test(checksum)) {
-    return (
-      `Invalid checksum "${checksum}" — pass the full checksum from ` +
-      `trueline_read including the range prefix (e.g. "1-${lines.length}:${checksum}").`
-    );
-  }
-
-  const parsed = parseChecksum(checksum);
-
-  // Any 0-0 checksum other than the exact EMPTY_FILE_CHECKSUM sentinel
-  // (handled above) is invalid. Without this guard, rangeChecksum would
-  // loop from index -1, accessing lines[-1] (undefined) and crashing.
-  if (parsed.startLine === 0 && parsed.endLine === 0) {
-    return `Checksum mismatch: "0-0:${parsed.hash}" is not a valid empty-file checksum (expected "${EMPTY_FILE_CHECKSUM}").`;
-  }
-
-  if (parsed.endLine > lines.length) {
-    return (
-      `Checksum range ${parsed.startLine}-${parsed.endLine} exceeds ` +
-      `file length (${lines.length} lines). File may have been truncated.`
-    );
-  }
-
-  const recomputed = rangeChecksum(lines, parsed.startLine, parsed.endLine);
-  const recomputedHash = recomputed.slice(recomputed.indexOf(":") + 1);
-
-  if (recomputedHash !== parsed.hash) {
-    return (
-      `Checksum mismatch for lines ${parsed.startLine}-${parsed.endLine}: ` +
-      `expected ${parsed.hash}, got ${recomputedHash}. ` +
-      `File changed since last read. Re-read with trueline_read.`
-    );
-  }
-
-  return null;
-}
-
-// ==============================================================================
-// Hash Verification
-// ==============================================================================
-
-/**
- * Verify that line:hash pairs match the current file content.
- *
- * @param lines - Array of file lines (0-indexed, so lines[0] is line 1)
- * @param refs - Parsed line:hash references to verify
- * @returns null if all match, or an error message if any mismatch
- */
-export function verifyHashes(
-  lines: string[],
-  refs: LineRef[],
-): string | null {
-  for (const ref of refs) {
-    if (ref.line === 0 && ref.hash === "") continue; // "0:" always valid
-
-    if (ref.line < 1 || ref.line > lines.length) {
-      return `Line ${ref.line} out of range (file has ${lines.length} lines)`;
-    }
-
-    const actual = lineHash(lines[ref.line - 1]);
-    if (actual !== ref.hash) {
-      return (
-        `Hash mismatch at line ${ref.line}: expected ${ref.hash}, got ${actual}. ` +
-        `File may have changed since last read. Re-read with trueline_read.`
-      );
-    }
-  }
-  return null;
-}
-
 // ==============================================================================
 // Edit Application
 // ==============================================================================
@@ -531,64 +328,4 @@ export function applyEdits(fileLines: string[], ops: EditOp[]): string[] {
   }
 
   return result;
-}
-
-/**
- * Write content to a file atomically: write to temp file in same
- * directory, then rename. This prevents partial writes if the process
- * is interrupted.
- *
- * Preserves the original file's permissions on the temp file before
- * renaming so that the mode is not silently changed to the process umask.
- * Cleans up the temp file on error to avoid leaving orphaned files.
- *
- * @param expectedMtimeMs - If provided, the file's mtime (from when it
- *   was read) is re-checked before the final rename. If another process
- *   modified the file in the interim, the write is aborted. This narrows
- *   the TOCTOU window but does not eliminate it — a concurrent write
- *   could still land between the re-stat and the rename.
- */
-export async function atomicWriteFile(
-  filePath: string,
-  content: string,
-  expectedMtimeMs?: number,
-): Promise<void> {
-  const dir = dirname(filePath);
-  const tmpName = `.trueline-tmp-${randomBytes(6).toString("hex")}`;
-  const tmpPath = resolve(dir, tmpName);
-
-  let originalMode: number | undefined;
-  try {
-    originalMode = (await stat(filePath)).mode;
-  } catch { /* new file — no original mode to preserve */ }
-
-  try {
-    await writeFile(tmpPath, content, "utf-8");
-    if (originalMode !== undefined) {
-      await chmod(tmpPath, originalMode);
-    }
-
-    // Narrow the TOCTOU window: if we know the mtime from when we read,
-    // verify it hasn't changed before committing the rename. This does not
-    // eliminate the race but catches the common case of concurrent edits.
-    if (expectedMtimeMs !== undefined) {
-      try {
-        const currentMtime = (await stat(filePath)).mtimeMs;
-        if (currentMtime !== expectedMtimeMs) {
-          throw new Error(
-            `File was modified by another process (expected mtime ${expectedMtimeMs}, ` +
-            `got ${currentMtime}). Re-read with trueline_read.`,
-          );
-        }
-      } catch (err) {
-        if (err instanceof Error && err.message.startsWith("File was modified")) throw err;
-        // stat failed (file deleted?) — proceed with rename
-      }
-    }
-
-    await rename(tmpPath, filePath);
-  } catch (err) {
-    try { await unlink(tmpPath); } catch { /* best-effort cleanup */ }
-    throw err;
-  }
 }
