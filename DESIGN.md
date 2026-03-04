@@ -253,27 +253,82 @@ Additional protections:
 - **Regular files only:** directories, devices, FIFOs, and sockets
   are rejected.
 
-## Why FNV-1a?
+## Hash algorithm details
 
-The vscode-hashline-edit-tool spec chose FNV-1a for its speed and
-simplicity. It's a single-pass, non-cryptographic hash with good
-distribution.
+### FNV-1a 32-bit
 
-There are two implementations:
+All hashing uses FNV-1a 32-bit, a single-pass non-cryptographic hash
+chosen by the vscode-hashline-edit-tool spec for its speed and
+simplicity.
 
-- **`fnv1aHash(str)`** — encodes UTF-8 inline from a JS string. Used
-  by `trueline_read` (which decodes lines to strings for output
-  formatting) and by `trueline_diff` (which works in-memory).
-- **`fnv1aHashBytes(buf, start, end)`** — feeds raw UTF-8 bytes
-  directly from a Buffer. Used by `trueline_edit`'s streaming engine
-  to hash lines without ever decoding them to JS strings.
+Constants:
 
-Both produce identical results for the same content. The Buffer
-variant avoids the string decode/encode round-trip, which matters
-for the streaming edit path where unchanged lines are never converted
-to strings at all.
+- **Offset basis:** `0x811c9dc5` (2166136261)
+- **Prime:** `0x01000193` (16777619)
 
-The 2-letter per-line hash (676 values) is intentionally coarse — it's
-a typo detector, not a security boundary. The range checksum uses the
-full 32-bit hash for each line, giving much stronger collision
-resistance over the full range.
+For each byte `b` of input:
+
+```
+hash = (hash XOR b) * prime  (mod 2^32)
+```
+
+### Per-line hash: `fnv1aHash`
+
+Input: the line's content as a string, with trailing `\n`, `\r\n`, or
+`\r` stripped. The string is encoded as UTF-8 bytes inline (handling
+surrogate pairs for codepoints above U+FFFF), and each byte is fed
+into the FNV-1a accumulator.
+
+The streaming edit engine has a byte-level equivalent,
+`fnv1aHashBytes(buf, start, end)`, that hashes raw UTF-8 bytes from a
+Buffer directly — identical output, no string decode/encode
+round-trip.
+
+### Two-letter tag: `hashToLetters`
+
+The 32-bit per-line hash is projected into two lowercase letters for
+the `N:xy|content` display format:
+
+```
+c1 = 'a' + (hash % 26)          // bits 0-4
+c2 = 'a' + ((hash >>> 8) % 26)  // bits 8-12
+```
+
+This is a lossy mapping to 676 possible values — a typo detector, not
+a security boundary.
+
+### Range checksum: `foldHash`
+
+The range checksum is an FNV-1a hash *of hashes*. Starting from the
+offset basis, each line's full 32-bit hash is folded into the
+accumulator byte-by-byte in little-endian order:
+
+```
+for each byte b in [hash & 0xff, (hash>>>8) & 0xff,
+                    (hash>>>16) & 0xff, (hash>>>24) & 0xff]:
+    accumulator = (accumulator XOR b) * prime  (mod 2^32)
+```
+
+Because FNV-1a is sequential, the order of lines matters — swapping
+two lines produces a different checksum even if the set of line hashes
+is the same.
+
+The result is formatted as `startLine-endLine:8hex`
+(e.g. `1-50:f7e2a1b0`). The 8 hex digits are the full 32-bit
+accumulator, giving much stronger collision resistance than the
+2-letter per-line tags.
+
+### Three layers of edit protection
+
+| Layer | What it checks | Granularity | Detects |
+|-------|---------------|-------------|---------|
+| Boundary hash | Two-letter tag at edit start/end lines | Single line | Change to the specific lines being replaced |
+| Range checksum | FNV-1a accumulator over all lines in the read window | Entire read range | Change to *any* line in the window, even lines not being edited |
+| mtime guard | File modification time before atomic rename | Whole file | Concurrent modification by another process between read and write |
+
+The boundary hash is a fast-fail: the streaming engine checks it the
+moment it reaches an edit's start or end line. The range checksum is
+verified after the full stream completes — it catches changes to lines
+the agent isn't editing but that were included in the `trueline_read`
+window. The mtime guard narrows the TOCTOU window for external
+writers.
