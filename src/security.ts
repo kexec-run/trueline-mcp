@@ -162,34 +162,30 @@ export function evaluateFilePath(
   denyGlobs: string[][],
   caseInsensitive: boolean = process.platform === "win32",
 ): { denied: boolean; matchedPattern?: string } {
-  // Normalize backslashes to forward slashes for cross-platform matching
   const normalized = filePath.replace(/\\/g, "/");
   // For globs without path separators, also test just the basename so that
   // a simple pattern like ".env" matches "/any/path/.env" — the same
   // gitignore-style semantics Claude Code settings use.
   const basename = normalized.split("/").pop() ?? normalized;
 
-  for (const globs of denyGlobs) {
-    for (const glob of globs) {
-      const re = fileGlobToRegex(glob, caseInsensitive);
-      if (re.test(normalized)) {
-        return { denied: true, matchedPattern: glob };
-      }
-      // Pattern has no "/" — try matching just the filename (gitignore semantics)
-      if (!glob.includes("/") && re.test(basename)) {
-        return { denied: true, matchedPattern: glob };
-      }
-      // Relative pattern containing "/" but not anchored with "/" or "*":
-      // treat as a suffix — "src/.env" should match "/project/src/.env".
-      if (!glob.startsWith("/") && !glob.startsWith("*") && glob.includes("/")) {
-        const normCmp = caseInsensitive ? normalized.toLowerCase() : normalized;
-        const globCmp = caseInsensitive ? glob.toLowerCase() : glob;
-        if (normCmp.endsWith("/" + globCmp) || normCmp === globCmp) {
-          return { denied: true, matchedPattern: glob };
-        }
-      }
-    }
-  }
+  const matches = (glob: string): boolean => {
+    const re = fileGlobToRegex(glob, caseInsensitive);
+    if (re.test(normalized)) return true;
 
-  return { denied: false };
+    // Glob without "/" — also test the basename (gitignore semantics).
+    if (!glob.includes("/")) return re.test(basename);
+
+    // Relative glob with "/" — treat as a suffix match.
+    // e.g. "src/.env" should match "/project/src/.env".
+    if (!glob.startsWith("/") && !glob.startsWith("*")) {
+      const norm = caseInsensitive ? normalized.toLowerCase() : normalized;
+      const pat  = caseInsensitive ? glob.toLowerCase() : glob;
+      return norm.endsWith("/" + pat) || norm === pat;
+    }
+
+    return false;
+  };
+
+  const matchedPattern = denyGlobs.flat().find(matches);
+  return matchedPattern ? { denied: true, matchedPattern } : { denied: false };
 }
