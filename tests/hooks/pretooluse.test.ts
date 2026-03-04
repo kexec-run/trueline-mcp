@@ -20,10 +20,17 @@ describe("PreToolUse hook", () => {
     expect(result.reason).toContain("trueline_edit");
   });
 
-  test("approves all other tools", () => {
-    for (const tool of ["Read", "Write", "Bash", "Glob"]) {
+  test("nudges Read toward trueline_read", () => {
+    const result = processHookEvent({ tool_name: "Read", tool_input: {} });
+    expect(result.decision).toBe("approve");
+    expect(result.reason).toContain("trueline_read");
+  });
+
+  test("approves other tools without a nudge", () => {
+    for (const tool of ["Write", "Bash", "Glob"]) {
       const result = processHookEvent({ tool_name: tool, tool_input: {} });
       expect(result.decision).toBe("approve");
+      expect(result.reason).toBeUndefined();
     }
   });
 });

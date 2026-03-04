@@ -1,5 +1,5 @@
 {
-  "description": "trueline-mcp hooks — injects trueline instructions at session start, intercepts Edit",
+  "description": "trueline-mcp hooks — injects trueline instructions at session start, intercepts Edit, nudges Read",
   "hooks": {
     "SessionStart": [
       {
@@ -23,7 +23,7 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Edit|MultiEdit",
+        "matcher": "Edit|MultiEdit|Read",
         "hooks": [
           {
             "type": "command",

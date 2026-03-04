@@ -10,6 +10,19 @@ export function processHookEvent(event) {
         "</trueline_redirect>",
     };
   }
+
+  if (event.tool_name === "Read") {
+    return {
+      decision: "approve",
+      reason:
+        "<trueline_nudge>" +
+        "Prefer trueline_read over Read. " +
+        "trueline_read returns per-line hashes and a checksum needed for trueline_edit. " +
+        "Use Read only when you need raw file content in context and will not be editing." +
+        "</trueline_nudge>",
+    };
+  }
+
   return { decision: "approve" };
 }
 
