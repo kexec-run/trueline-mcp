@@ -1,14 +1,14 @@
 // ==============================================================================
 // trueline_read handler
 //
-// Streams the file line-by-line via `createReadStream` — the file is never
-// loaded into memory as a whole.  Lines before `start_line` are counted and
-// skipped; lines after `end_line` stop the stream early.  Each line is decoded
-// to a JS string (required for the trueline output format), hashed with
-// `fnv1aHash`, and formatted as `lineNumber:hash|content`.
+// Streams the file line-by-line via `splitLines` — the file is never loaded
+// into memory as a whole.  Lines before `start_line` are counted and skipped;
+// lines after `end_line` stop the stream early.  Each line is decoded to a JS
+// string (required for the trueline output format), hashed with `fnv1aHash`,
+// and formatted as `lineNumber:hash|content`.
 // ==============================================================================
 
-import { createReadStream } from "node:fs";
+import { splitLines } from "../line-splitter.ts";
 import { EMPTY_FILE_CHECKSUM, FNV_OFFSET_BASIS, fnv1aHash, foldHash, formatChecksum, hashToLetters } from "../hash.ts";
 import { validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
@@ -19,67 +19,6 @@ interface ReadParams {
   end_line?: number;
   projectDir?: string;
   allowedDirs?: string[];
-}
-
-/**
- * Stream lines from a file, treating \r\n, \r, and \n as line endings.
- *
- * Yields one string per line with no trailing EOL characters.  Handles
- * \r\n pairs split across chunk boundaries.
- */
-async function* streamLines(filePath: string): AsyncGenerator<string> {
-  const stream = createReadStream(filePath, { encoding: "utf-8" });
-  let partial = "";
-  let prevChunkEndedWithCR = false;
-
-  for await (const chunk of stream) {
-    let lineStart = 0;
-
-    // If the previous chunk ended with \r and this chunk starts with \n,
-    // they form a single \r\n pair — skip the \n.
-    if (prevChunkEndedWithCR && chunk.length > 0 && chunk.charCodeAt(0) === 0x0a) {
-      lineStart = 1;
-    }
-    prevChunkEndedWithCR = false;
-
-    for (let i = lineStart; i < chunk.length; i++) {
-      const ch = chunk.charCodeAt(i);
-      const isCR = ch === 0x0d;
-      const isLF = ch === 0x0a;
-
-      if (!isCR && !isLF) continue;
-
-      // ============================================================
-      // Found a line terminator (\r, \n, or \r\n) — emit the line.
-      // ============================================================
-      yield partial + chunk.slice(lineStart, i);
-      partial = "";
-
-      // Consume the \n half of a \r\n pair, if present.
-      if (isCR) {
-        const nextIndex = i + 1;
-        if (nextIndex < chunk.length) {
-          // \r\n within the same chunk — skip the \n.
-          if (chunk.charCodeAt(nextIndex) === 0x0a) i++;
-        } else {
-          // \r at chunk boundary — the \n may open the next chunk.
-          prevChunkEndedWithCR = true;
-        }
-      }
-
-      lineStart = i + 1;
-    }
-
-    // Accumulate any remaining text after the last terminator.
-    if (lineStart < chunk.length) {
-      partial += chunk.slice(lineStart);
-    }
-  }
-
-  // File without a trailing newline — emit the final partial line.
-  if (partial.length > 0) {
-    yield partial;
-  }
 }
 
 export async function handleRead(params: ReadParams): Promise<ToolResult> {
@@ -101,37 +40,40 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   const end = end_line ?? Infinity;
   const outputParts: string[] = [];
   let checksumHash = FNV_OFFSET_BASIS;
-  let lineNo = 0;
-  let lastLine = 0;
+  let lastLineNo = 0;
+  let totalLines = 0;
 
-  for await (const line of streamLines(resolvedPath)) {
-    lineNo++;
+  try {
+    for await (const { lineBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: true })) {
+      totalLines = lineNumber;
 
-    // Binary detection: null bytes indicate non-text content.
-    if (line.includes("\0")) {
+      if (lineNumber < start) continue;
+      if (lineNumber > end) break;
+
+      lastLineNo = lineNumber;
+      const line = lineBytes.toString("utf-8");
+      const h = fnv1aHash(line);
+      checksumHash = foldHash(checksumHash, h);
+
+      outputParts.push(`${lineNumber}:${hashToLetters(h)}|${line}`);
+    }
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("binary")) {
       return errorResult(`"${file_path}" appears to be a binary file`);
     }
-
-    if (lineNo < start) continue;
-    if (lineNo > end) break;
-
-    lastLine = lineNo;
-    const h = fnv1aHash(line);
-    checksumHash = foldHash(checksumHash, h);
-
-    outputParts.push(`${lineNo}:${hashToLetters(h)}|${line}`);
+    throw err;
   }
 
   // Empty file
-  if (lineNo === 0) {
+  if (totalLines === 0) {
     return textResult(`(empty file)\n\nchecksum: ${EMPTY_FILE_CHECKSUM}`);
   }
 
   // start_line out of range
-  if (start > lineNo) {
-    return errorResult(`start_line ${start} out of range (file has ${lineNo} lines)`);
+  if (start > totalLines) {
+    return errorResult(`start_line ${start} out of range (file has ${totalLines} lines)`);
   }
 
-  const checksum = formatChecksum(start, lastLine, checksumHash);
+  const checksum = formatChecksum(start, lastLineNo, checksumHash);
   return textResult(`${outputParts.join("\n")}\n\nchecksum: ${checksum}`);
 }

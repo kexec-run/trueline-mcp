@@ -21,11 +21,12 @@
 // ==============================================================================
 
 import { randomBytes } from "node:crypto";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createWriteStream } from "node:fs";
 import { chmod, rename, stat, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { finished } from "node:stream/promises";
 import { EMPTY_FILE_CHECKSUM, FNV_OFFSET_BASIS, FNV_PRIME, foldHash, formatChecksum, hashToLetters } from "./hash.ts";
+import { EMPTY_BUF, LF_BUF, splitLines } from "./line-splitter.ts";
 import type { ChecksumRef } from "./parse.ts";
 
 // ==============================================================================
@@ -55,144 +56,6 @@ function fnv1aHashBytes(buf: Buffer, start: number, end: number): number {
     hash = Math.imul(hash ^ buf[i], FNV_PRIME) >>> 0;
   }
   return hash;
-}
-
-// ==============================================================================
-// Byte-level line streaming
-// ==============================================================================
-
-interface ByteLine {
-  lineBytes: Buffer;
-  eolBytes: Buffer;
-  lineNumber: number;
-}
-
-const LF_BUF = Buffer.from("\n");
-const CRLF_BUF = Buffer.from("\r\n");
-const CR_BUF = Buffer.from("\r");
-const EMPTY_BUF = Buffer.alloc(0);
-
-/**
- * Stream lines from a file as raw Buffers without decoding to JS strings.
- *
- * Yields one `ByteLine` per line: the raw line bytes (no EOL), the EOL
- * bytes (LF / CRLF / CR / empty for last line without trailing newline),
- * and the 1-based line number. Handles `\r\n` pairs split across chunk
- * boundaries the same way `streamLines` in `read.ts` does.
- *
- * Also performs binary detection: throws if a null byte (0x00) is
- * encountered, since this check is essentially free during the byte scan
- * for line terminators.
- */
-async function* streamByteLines(filePath: string): AsyncGenerator<ByteLine> {
-  const stream = createReadStream(filePath);
-  let partials: Buffer[] = [];
-  let partialsLen = 0;
-  let lineNumber = 0;
-  let prevChunkEndedWithCR = false;
-
-  for await (const rawChunk of stream) {
-    const buf: Buffer = Buffer.isBuffer(rawChunk) ? rawChunk : Buffer.from(rawChunk);
-    let lineStart = 0;
-
-    // If the previous chunk ended with \r, resolve whether it's \r\n or bare \r.
-    if (prevChunkEndedWithCR) {
-      prevChunkEndedWithCR = false;
-      const eol = buf.length > 0 && buf[0] === 0x0a ? CRLF_BUF : CR_BUF;
-      if (eol === CRLF_BUF) lineStart = 1;
-      lineNumber++;
-      yield {
-        lineBytes: flushPartials(partials, partialsLen),
-        eolBytes: eol,
-        lineNumber,
-      };
-      partials = [];
-      partialsLen = 0;
-    }
-
-    for (let i = lineStart; i < buf.length; i++) {
-      const byte = buf[i];
-
-      // Binary detection: null bytes have no place in a text file.
-      if (byte === 0x00) {
-        stream.destroy();
-        throw new Error("File appears to be binary (contains null bytes)");
-      }
-
-      const isCR = byte === 0x0d;
-      const isLF = byte === 0x0a;
-
-      if (!isCR && !isLF) continue;
-
-      // ============================================================
-      // Found a line terminator — accumulate content and emit.
-      // ============================================================
-      const slice = buf.subarray(lineStart, i);
-
-      // Determine EOL type.
-      let eol: Buffer;
-      if (isCR) {
-        const nextIndex = i + 1;
-        if (nextIndex < buf.length) {
-          // \r\n within the same chunk — skip the \n.
-          if (buf[nextIndex] === 0x0a) {
-            eol = CRLF_BUF;
-            i++;
-          } else {
-            eol = CR_BUF;
-          }
-        } else {
-          // \r at chunk boundary — defer until next chunk.
-          partials.push(slice);
-          partialsLen += slice.length;
-          prevChunkEndedWithCR = true;
-          lineStart = i + 1;
-          continue;
-        }
-      } else {
-        eol = LF_BUF;
-      }
-
-      // Emit the line.
-      lineNumber++;
-      if (partialsLen > 0) {
-        partials.push(slice);
-        yield {
-          lineBytes: flushPartials(partials, partialsLen + slice.length),
-          eolBytes: eol,
-          lineNumber,
-        };
-        partials = [];
-        partialsLen = 0;
-      } else {
-        yield { lineBytes: slice, eolBytes: eol, lineNumber };
-      }
-
-      lineStart = i + 1;
-    }
-
-    // Remaining bytes from this chunk become partial.
-    if (lineStart < buf.length) {
-      partials.push(buf.subarray(lineStart));
-      partialsLen += buf.length - lineStart;
-    }
-  }
-
-  // Final content: pending CR at EOF or leftover partials (no trailing newline).
-  if (prevChunkEndedWithCR || partialsLen > 0) {
-    lineNumber++;
-    yield {
-      lineBytes: flushPartials(partials, partialsLen),
-      eolBytes: prevChunkEndedWithCR ? CR_BUF : EMPTY_BUF,
-      lineNumber,
-    };
-  }
-}
-
-function flushPartials(partials: Buffer[], totalLen: number): Buffer {
-  if (partials.length === 0) return EMPTY_BUF;
-  if (partials.length === 1) return partials[0];
-  return Buffer.concat(partials, totalLen);
 }
 
 // ==============================================================================
@@ -372,7 +235,7 @@ export async function streamingEdit(
 
   // ---- Stream source file ----
   try {
-    for await (const { lineBytes, eolBytes, lineNumber } of streamByteLines(resolvedPath)) {
+    for await (const { lineBytes, eolBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: true })) {
       totalLines = lineNumber;
       lastEolBytes = eolBytes;
 
@@ -487,7 +350,7 @@ export async function streamingEdit(
       }
     }
   } catch (err: unknown) {
-    // Binary detection throws from streamByteLines — convert to a structured
+    // Binary detection throws from splitLines — convert to a structured
     // error result so callers get { ok: false } instead of an exception.
     if (err instanceof Error && err.message.includes("binary")) {
       return await fail(err.message);
