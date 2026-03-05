@@ -8,7 +8,6 @@ Each line is tagged with a short hash. Before writing, the server verifies that
 the lines being replaced still match the hashes the agent observed — catching
 stale edits caused by concurrent changes or model hallucination.
 
-
 ## Why Trueline?
 
 Trueline saves tokens on every edit — and catches mistakes the built-in
@@ -94,18 +93,18 @@ required.
 
 `trueline_read` returns file content in trueline format. Each line is prefixed
 with its line number and a 2-letter hash derived from FNV-1a 32-bit. A range
-checksum (FNV-1a 32-bit, lower 16 bits, 4 hex chars) covers the lines read:
+checksum (FNV-1a 32-bit, 8 hex chars) covers the lines read:
 
 ```
-1:bq|import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-2:ab|
-3:mz|const server = new Server({ name: "trueline-mcp", version: "0.1.0" });
+1:bx|import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+2:dd|
+3:ew|const server = new Server({ name: "trueline-mcp", version: "0.1.0" });
 
-checksum: 1-3:a4b5
+checksum: 1-3:8a64a3f7
 ```
 
 `trueline_edit` takes a range specifier (`startLine:startHash..endLine:endHash`,
-e.g. `"1:bq..3:mz"`) and the checksum from the read. Both are verified before
+e.g. `"1:bx..3:ew"`) and the checksum from the read. Both are verified before
 the write — if either has changed since the read, the edit is rejected.
 
 Here is what a `trueline_edit` call looks like in practice:
