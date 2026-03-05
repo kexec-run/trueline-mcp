@@ -313,7 +313,7 @@ describe("multi-edit batches", () => {
   });
 
   test("empty edits array is rejected or no-ops gracefully", async () => {
-    const { path, cs } = setupFile("empty-edits.txt", "aaa\n");
+    const { path } = setupFile("empty-edits.txt", "aaa\n");
 
     const result = await edit({
       file_path: path,
