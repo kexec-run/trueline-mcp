@@ -140,6 +140,9 @@ export function parseChecksum(checksum: string): ChecksumRef {
   if (startLine > endLine) {
     throw new Error(`Invalid checksum "${checksum}" — start ${startLine} must be ≤ end ${endLine}`);
   }
+  if (startLine === 0 && endLine === 0 && hash !== "00000000") {
+    throw new Error(`Invalid checksum "${checksum}" — empty-file sentinel must have hash 00000000`);
+  }
 
   return { startLine, endLine, hash };
 }

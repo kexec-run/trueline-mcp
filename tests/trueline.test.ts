@@ -135,4 +135,8 @@ describe("parseChecksum", () => {
   test("rejects scientific notation in end line", () => {
     expect(() => parseChecksum("1-3e1:00000000")).toThrow("decimal integer");
   });
+
+  test("rejects 0-0 sentinel with non-zero hash", () => {
+    expect(() => parseChecksum("0-0:abcdef01")).toThrow("empty-file sentinel must have hash 00000000");
+  });
 });

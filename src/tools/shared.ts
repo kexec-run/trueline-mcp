@@ -114,14 +114,10 @@ export async function validatePath(
 // Content-free edit validation (for streaming pipeline)
 // ==============================================================================
 
-export interface StreamEditOp {
-  startLine: number;
-  endLine: number;
-  content: string[];
-  insertAfter: boolean;
-  startHash: string;
-  endHash: string;
-}
+import type { StreamEditOp } from "../streaming-edit.ts";
+
+// Re-exported for convenience since validateEdits produces StreamEditOps.
+export type { StreamEditOp } from "../streaming-edit.ts";
 
 type ValidateEditsOk = {
   ok: true;
@@ -179,18 +175,35 @@ export function validateEdits(edits: EditInput[], checksum: string): ValidateEdi
     });
   }
 
-  // Overlap detection
-  const touchedLines = new Set<number>();
-  for (const op of ops) {
-    if (op.insertAfter) continue;
-    for (let l = op.startLine; l <= op.endLine; l++) {
-      if (touchedLines.has(l)) {
+  // Overlap detection: sort by startLine, then scan for overlapping ranges.
+  // O(m log m) where m = number of replace ops (insert-after ops are excluded
+  // since they don't consume source lines).
+  const replaceOps = ops.filter((op) => !op.insertAfter);
+  replaceOps.sort((a, b) => a.startLine - b.startLine);
+  for (let i = 1; i < replaceOps.length; i++) {
+    if (replaceOps[i].startLine <= replaceOps[i - 1].endLine) {
+      return {
+        ok: false,
+        error: errorResult(`Overlapping ranges: line ${replaceOps[i].startLine} targeted by multiple edits`),
+      };
+    }
+  }
+
+  // Reject insert-after ops whose startLine falls within a replace range.
+  // An insert-after inside a replace is ambiguous: the target line will be
+  // deleted by the replace, so there is no anchor to insert after.
+  const insertOps = ops.filter((op) => op.insertAfter);
+  for (const ia of insertOps) {
+    for (const rep of replaceOps) {
+      if (ia.startLine >= rep.startLine && ia.startLine < rep.endLine) {
         return {
           ok: false,
-          error: errorResult(`Overlapping ranges: line ${l} targeted by multiple edits`),
+          error: errorResult(
+            `Insert-after at line ${ia.startLine} conflicts with replace range ` +
+              `${rep.startLine}\u2013${rep.endLine}. Insert after the last line of the replace instead.`,
+          ),
         };
       }
-      touchedLines.add(l);
     }
   }
 

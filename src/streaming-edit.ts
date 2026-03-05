@@ -27,7 +27,19 @@ import { dirname, resolve } from "node:path";
 import { finished } from "node:stream/promises";
 import { EMPTY_FILE_CHECKSUM, FNV_OFFSET_BASIS, FNV_PRIME, foldHash, formatChecksum, hashToLetters } from "./hash.ts";
 import type { ChecksumRef } from "./parse.ts";
-import type { StreamEditOp } from "./tools/shared.ts";
+
+// ==============================================================================
+// StreamEditOp — the validated, parsed representation of a single edit
+// ==============================================================================
+
+export interface StreamEditOp {
+  startLine: number;
+  endLine: number;
+  content: string[];
+  insertAfter: boolean;
+  startHash: string;
+  endHash: string;
+}
 
 /**
  * Compute FNV-1a 32-bit hash directly on raw UTF-8 bytes in a Buffer.
@@ -42,7 +54,7 @@ function fnv1aHashBytes(buf: Buffer, start: number, end: number): number {
   for (let i = start; i < end; i++) {
     hash = Math.imul(hash ^ buf[i], FNV_PRIME) >>> 0;
   }
-  return hash >>> 0;
+  return hash;
 }
 
 // ==============================================================================
@@ -67,6 +79,10 @@ const EMPTY_BUF = Buffer.alloc(0);
  * bytes (LF / CRLF / CR / empty for last line without trailing newline),
  * and the 1-based line number. Handles `\r\n` pairs split across chunk
  * boundaries the same way `streamLines` in `read.ts` does.
+ *
+ * Also performs binary detection: throws if a null byte (0x00) is
+ * encountered, since this check is essentially free during the byte scan
+ * for line terminators.
  */
 async function* streamByteLines(filePath: string): AsyncGenerator<ByteLine> {
   const stream = createReadStream(filePath);
@@ -96,6 +112,13 @@ async function* streamByteLines(filePath: string): AsyncGenerator<ByteLine> {
 
     for (let i = lineStart; i < buf.length; i++) {
       const byte = buf[i];
+
+      // Binary detection: null bytes have no place in a text file.
+      if (byte === 0x00) {
+        stream.destroy();
+        throw new Error("File appears to be binary (contains null bytes)");
+      }
+
       const isCR = byte === 0x0d;
       const isLF = byte === 0x0a;
 
@@ -241,9 +264,23 @@ export async function streamingEdit(
 
   // Await backpressure drain to prevent unbounded buffering in the writable
   // stream's internal buffer, which would defeat the memory-efficiency goal.
+  // Checks `writableNeedDrain` first — if the stream already drained (or
+  // never needed to), awaiting the drain event would hang forever.
   async function drain(): Promise<void> {
     if (writeError) throw writeError;
-    await new Promise<void>((res) => outStream.once("drain", res));
+    if (!outStream.writableNeedDrain) return;
+    await new Promise<void>((res, rej) => {
+      const onDrain = () => {
+        outStream.removeListener("error", onError);
+        res();
+      };
+      const onError = (err: Error) => {
+        outStream.removeListener("drain", onDrain);
+        rej(err);
+      };
+      outStream.once("drain", onDrain);
+      outStream.once("error", onError);
+    });
   }
 
   // ---- State ----
@@ -294,20 +331,24 @@ export async function streamingEdit(
 
   async function fail(error: string): Promise<StreamingEditResult> {
     await cleanupTmp();
-    return { ok: false, error };
+    return { ok: false, error: `${resolvedPath}: ${error}` };
   }
 
   async function writeContentLines(content: string[]): Promise<void> {
     for (const line of content) await enqueueString(line);
   }
 
+  // Compare replacement content against original bytes. If identical, write
+  // the original buffers (no-op); otherwise write the replacement. Encodes
+  // replacement strings to Buffers once and reuses them for both the
+  // comparison and the output write to avoid double allocation.
   async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[]): Promise<void> {
     const replacementBufs = op.content.map((s) => Buffer.from(s, "utf-8"));
     if (buffersEqual(replacementBufs, origBytes)) {
       for (const buf of origBytes) await enqueueLine(buf);
     } else {
       contentChanged = true;
-      await writeContentLines(op.content);
+      for (const buf of replacementBufs) await enqueueLine(buf);
     }
   }
 
@@ -316,7 +357,7 @@ export async function streamingEdit(
   }
 
   function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
-    return `Hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}`;
+    return `hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}`;
   }
 
   // ---- Handle line-0 insert_after (prepend) before streaming ----
@@ -334,13 +375,6 @@ export async function streamingEdit(
     for await (const { lineBytes, eolBytes, lineNumber } of streamByteLines(resolvedPath)) {
       totalLines = lineNumber;
       lastEolBytes = eolBytes;
-
-      // Binary detection: null byte in line content
-      for (let i = 0; i < lineBytes.length; i++) {
-        if (lineBytes[i] === 0x00) {
-          return await fail("File appears to be binary (contains null bytes)");
-        }
-      }
 
       // EOL detection from first line ending seen
       if (!eolDetected && eolBytes.length > 0) {
@@ -452,7 +486,12 @@ export async function streamingEdit(
         await enqueueLine(lineBytes);
       }
     }
-  } catch (err) {
+  } catch (err: unknown) {
+    // Binary detection throws from streamByteLines — convert to a structured
+    // error result so callers get { ok: false } instead of an exception.
+    if (err instanceof Error && err.message.includes("binary")) {
+      return await fail(err.message);
+    }
     await cleanupTmp();
     throw err;
   }
@@ -460,12 +499,17 @@ export async function streamingEdit(
   // ---- Post-stream: flush last line ----
   // The pending write pattern: the last line gets flushed with or without
   // EOL based on whether the original file had a trailing newline.
-  if (pendingWrite !== null) {
-    if (!outStream.write(pendingWrite)) await drain();
-    // If the last source line had a non-empty eolBytes, the file had a trailing newline
-    if (lastEolBytes.length > 0) {
-      if (!outStream.write(detectedEol)) await drain();
+  try {
+    if (pendingWrite !== null) {
+      if (!outStream.write(pendingWrite)) await drain();
+      // If the last source line had a non-empty eolBytes, the file had a trailing newline
+      if (lastEolBytes.length > 0) {
+        if (!outStream.write(detectedEol)) await drain();
+      }
     }
+  } catch (err) {
+    await cleanupTmp();
+    throw err;
   }
 
   // Finish writing — `finished()` resolves on 'finish', rejects on 'error'.
@@ -510,7 +554,7 @@ export async function streamingEdit(
       }
 
       const base =
-        `Checksum mismatch for lines ${checksumRef.startLine}-${checksumRef.endLine}: ` +
+        `${resolvedPath}: checksum mismatch for lines ${checksumRef.startLine}\u2013${checksumRef.endLine}: ` +
         `expected ${expected}, got ${actual}. File changed since last read.`;
 
       if (minLine !== Infinity) {
@@ -519,7 +563,7 @@ export async function streamingEdit(
           error:
             base +
             `\n\n` +
-            `However, lines ${minLine}-${maxLine} appear unchanged. ` +
+            `However, lines ${minLine}\u2013${maxLine} appear unchanged. ` +
             `Re-read with trueline_read(start_line=${minLine}, end_line=${maxLine}) ` +
             `to get a narrow checksum, then retry the edit.`,
         };
@@ -555,8 +599,14 @@ export async function streamingEdit(
       if (fileStat.mtimeMs !== mtimeMs) {
         return await fail("File was modified by another process. Re-read with trueline_read.");
       }
-    } catch {
-      // stat failed (file deleted?) — proceed with rename
+    } catch (err: unknown) {
+      // ENOENT means the file was deleted between validatePath and here —
+      // proceed with rename so the edit still lands. Any other error
+      // (EPERM, EIO, etc.) is unexpected and should not be silently ignored.
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        await cleanupTmp();
+        throw err;
+      }
     }
 
     try {

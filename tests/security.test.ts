@@ -75,6 +75,18 @@ describe("fileGlobToRegex", () => {
     expect(re.test("x/y/z/a")).toBe(true);
     expect(re.test("x/y/z/b")).toBe(false);
   });
+
+  test("escapes regex metacharacters in glob literals", () => {
+    const re = fileGlobToRegex("file[1].ts");
+    expect(re.test("file[1].ts")).toBe(true);
+    expect(re.test("fileX.ts")).toBe(false); // would match if [] were treated as char class
+  });
+
+  test("dot is literal not regex wildcard", () => {
+    const re = fileGlobToRegex("*.env");
+    expect(re.test("app.env")).toBe(true);
+    expect(re.test("appXenv")).toBe(false); // would match if . were regex any-char
+  });
 });
 
 describe("readToolDenyPatterns", () => {
@@ -151,5 +163,13 @@ describe("evaluateFilePath", () => {
   test("suffix matching respects caseInsensitive flag", () => {
     const result = evaluateFilePath("/project/SRC/.Env", [["src/.env"]], true);
     expect(result.denied).toBe(true);
+  });
+
+  test("bare pattern with metacharacters uses glob matching not string suffix", () => {
+    // Pattern "file[1].ts" should NOT match "fileX.ts" (would happen with naive suffix check)
+    const result = evaluateFilePath("/project/file[1].ts", [["file[1].ts"]]);
+    expect(result.denied).toBe(true);
+    const noMatch = evaluateFilePath("/project/fileX.ts", [["file[1].ts"]]);
+    expect(noMatch.denied).toBe(false);
   });
 });

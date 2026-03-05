@@ -16,9 +16,10 @@ interface DiffParams {
 export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   const { file_path, checksum, edits, projectDir, allowedDirs } = params;
 
-  // Diff intentionally uses Read deny patterns (not a separate "Diff" tool
-  // name) since diff is a read-only preview operation and should share the
-  // same access restrictions as trueline_read.
+  // Diff uses Read deny patterns (not Edit) because diff is a read-only preview
+  // operation — if you cannot read a file, you should not be able to diff it either.
+  // A file that is deny-listed for Edit but allowed for Read can still be diffed;
+  // the deny only blocks the actual write in trueline_edit.
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
@@ -33,8 +34,10 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     return errorResult(result.error);
   }
 
-  // tmpPath is always present when dryRun=true succeeds.
-  const tmpPath = result.tmpPath ?? resolvedPath;
+  if (!result.tmpPath) {
+    return textResult("(no changes)");
+  }
+  const tmpPath = result.tmpPath;
 
   // Use the resolved path relative to the project root so diff headers
   // show a meaningful path rather than just the basename.

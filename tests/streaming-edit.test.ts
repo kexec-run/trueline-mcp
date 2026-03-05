@@ -79,6 +79,33 @@ describe("validateEdits", () => {
       expect(result.ops).toHaveLength(2);
     }
   });
+
+  test("rejects insert-after inside a replace range", () => {
+    // Replace covers lines 2-4, insert-after at line 3 is ambiguous
+    const result = validateEdits(
+      [
+        { range: "2:aa..4:bb", content: ["A", "B", "C"] },
+        { range: "+3:cc", content: ["inserted"] },
+      ],
+      "1-5:abcdef01",
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.content[0].text).toContain("Insert-after at line 3 conflicts with replace range");
+    }
+  });
+
+  test("allows insert-after at end of replace range (not inside)", () => {
+    // Replace covers lines 2-4, insert-after at line 4 is at the boundary
+    const result = validateEdits(
+      [
+        { range: "2:aa..4:bb", content: ["A", "B", "C"] },
+        { range: "+4:bb", content: ["after replace"] },
+      ],
+      "1-5:abcdef01",
+    );
+    expect(result.ok).toBe(true);
+  });
 });
 
 // ==============================================================================
@@ -377,5 +404,37 @@ describe("streamingEdit", () => {
     const result = await streamingEdit(f, validated.ops, validated.checksumRef, oldMtime);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toContain("modified by another process");
+  });
+
+  test("error messages include file path", async () => {
+    const f = join(testDir, "path-in-error.txt");
+    writeFileSync(f, "line 1\nline 2\n");
+    const { mtimeMs } = statSync(f);
+
+    // Wrong checksum to trigger a mismatch error
+    const validated = validateEdits([{ range: "1:aa..1:aa", content: ["x"] }], "1-2:00000000");
+    if (!validated.ok) return;
+
+    const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain(f);
+    }
+  });
+
+  test("binary detection error includes file path", async () => {
+    const f = join(testDir, "binary-path.bin");
+    writeFileSync(f, Buffer.from([0x68, 0x65, 0x00, 0x6c, 0x6f]));
+    const { mtimeMs } = statSync(f);
+
+    const validated = validateEdits([{ range: "1:aa", content: ["x"] }], "1-1:abcdef01");
+    if (!validated.ok) return;
+
+    const result = await streamingEdit(f, validated.ops, validated.checksumRef, mtimeMs);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain(f);
+      expect(result.error).toContain("binary");
+    }
   });
 });

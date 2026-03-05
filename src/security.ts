@@ -100,7 +100,6 @@ export async function readToolDenyPatterns(
     try {
       mtime = (await stat(path)).mtimeMs;
     } catch {
-      settingsCache.set(path, { mtime: -1, globs: null });
       return null;
     }
 
@@ -175,12 +174,10 @@ export function evaluateFilePath(
     // Glob without "/" — also test the basename (gitignore semantics).
     if (!glob.includes("/")) return re.test(basename);
 
-    // Relative glob with "/" — treat as a suffix match.
-    // e.g. "src/.env" should match "/project/src/.env".
+    // Relative glob with "/" — treat as a suffix match via globstar prefix.
+    // e.g. deny pattern "src/.env" should match "/project/src/.env".
     if (!glob.startsWith("/") && !glob.startsWith("*")) {
-      const norm = caseInsensitive ? normalized.toLowerCase() : normalized;
-      const pat = caseInsensitive ? glob.toLowerCase() : glob;
-      return norm.endsWith(`/${pat}`) || norm === pat;
+      return fileGlobToRegex("**/" + glob, caseInsensitive).test(normalized);
     }
 
     return false;

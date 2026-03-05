@@ -1,6 +1,6 @@
 import { mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -31,10 +31,11 @@ async function resolveAllowedDirs(): Promise<string[]> {
   const realClaudeDir = await realpath(claudeDir).catch(() => null);
   if (realClaudeDir) dirs.push(realClaudeDir);
 
-  // TRUELINE_ALLOWED_DIRS — colon-separated additional paths
+  // TRUELINE_ALLOWED_DIRS — platform-delimited additional paths
+  // (colon on POSIX, semicolon on Windows to avoid splitting drive letters)
   const extra = process.env.TRUELINE_ALLOWED_DIRS;
   if (extra) {
-    for (const raw of extra.split(":").filter(Boolean)) {
+    for (const raw of extra.split(delimiter).filter(Boolean)) {
       const resolved = await realpath(raw).catch(() => null);
       if (resolved) dirs.push(resolved);
     }
