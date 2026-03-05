@@ -146,3 +146,55 @@ export function parseChecksum(checksum: string): ChecksumRef {
 
   return { startLine, endLine, hash };
 }
+
+export interface ReadRange {
+  start: number;
+  end: number;
+}
+
+interface RangeInput {
+  start?: number;
+  end?: number;
+}
+
+/**
+ * Parse and validate the `ranges` input for trueline_read.
+ *
+ * Returns a sorted, non-overlapping array of ranges. Undefined or empty
+ * input returns a single whole-file range.
+ */
+export function parseRanges(ranges: RangeInput[] | undefined): ReadRange[] {
+  if (!ranges || ranges.length === 0) {
+    return [{ start: 1, end: Infinity }];
+  }
+
+  const parsed: ReadRange[] = ranges.map((r) => {
+    const start = r.start ?? 1;
+    const end = r.end ?? Infinity;
+    if (start < 1) {
+      throw new Error(`Invalid range: start ${start} must be >= 1`);
+    }
+    if (start > end) {
+      throw new Error(`Invalid range: start ${start} must be <= end ${end}`);
+    }
+    return { start, end };
+  });
+
+  parsed.sort((a, b) => a.start - b.start);
+
+  // Check for overlapping or adjacent ranges
+  for (let i = 1; i < parsed.length; i++) {
+    const prev = parsed[i - 1];
+    const curr = parsed[i];
+    if (prev.end === Infinity || curr.start <= prev.end) {
+      throw new Error(`Ranges overlap: ${prev.start}-${prev.end} and ${curr.start}-${curr.end}`);
+    }
+    if (curr.start === prev.end + 1) {
+      throw new Error(
+        `Ranges are adjacent: ${prev.start}-${prev.end} and ${curr.start}-${curr.end}. ` + `Merge into a single range.`,
+      );
+    }
+  }
+
+  return parsed;
+}
