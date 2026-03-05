@@ -1,9 +1,9 @@
 import { readFile, unlink } from "node:fs/promises";
 import { relative } from "node:path";
 import { createTwoFilesPatch } from "diff";
-import { type ToolResult, errorResult, textResult } from "./types.ts";
-import { validatePath, validateEdits, type EditInput } from "./shared.ts";
 import { streamingEdit } from "../streaming-edit.ts";
+import { type EditInput, validateEdits, validatePath } from "./shared.ts";
+import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 interface DiffParams {
   file_path: string;
@@ -33,27 +33,24 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
     return errorResult(result.error);
   }
 
+  // tmpPath is always present when dryRun=true succeeds.
+  const tmpPath = result.tmpPath ?? resolvedPath;
+
   // Use the resolved path relative to the project root so diff headers
   // show a meaningful path rather than just the basename.
-  const relPath = file_path.startsWith("/")
-    ? relative(projectDir ?? process.cwd(), resolvedPath)
-    : file_path;
+  const relPath = file_path.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : file_path;
 
   try {
-    const [oldStr, newStr] = await Promise.all([
-      readFile(resolvedPath, "utf-8"),
-      readFile(result.tmpPath!, "utf-8"),
-    ]);
+    const [oldStr, newStr] = await Promise.all([readFile(resolvedPath, "utf-8"), readFile(tmpPath, "utf-8")]);
 
-    const diff = createTwoFilesPatch(
-      `a/${relPath}`,
-      `b/${relPath}`,
-      oldStr,
-      newStr,
-    );
+    const diff = createTwoFilesPatch(`a/${relPath}`, `b/${relPath}`, oldStr, newStr);
 
     return textResult(diff);
   } finally {
-    try { await unlink(result.tmpPath!); } catch { /* best-effort */ }
+    try {
+      await unlink(tmpPath);
+    } catch {
+      /* best-effort */
+    }
   }
 }

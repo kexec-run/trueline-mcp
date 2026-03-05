@@ -1,12 +1,8 @@
 import { realpath, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
-import {
-  parseRange,
-  parseChecksum,
-  type ChecksumRef,
-} from "../parse.ts";
-import { readToolDenyPatterns, evaluateFilePath } from "../security.ts";
-import { type ToolResult, errorResult } from "./types.ts";
+import { type ChecksumRef, parseChecksum, parseRange } from "../parse.ts";
+import { evaluateFilePath, readToolDenyPatterns } from "../security.ts";
+import { errorResult, type ToolResult } from "./types.ts";
 
 // ==============================================================================
 // Shared input type used by both edit and diff tools
@@ -21,7 +17,12 @@ export interface EditInput {
 // Path validation: resolution, deny check, stat
 // ==============================================================================
 
-type ValidatePathOk = { ok: true; resolvedPath: string; size: number; mtimeMs: number };
+type ValidatePathOk = {
+  ok: true;
+  resolvedPath: string;
+  size: number;
+  mtimeMs: number;
+};
 type ValidatePathErr = { ok: false; error: ToolResult };
 type ValidatePathResult = ValidatePathOk | ValidatePathErr;
 
@@ -37,9 +38,7 @@ export async function validatePath(
   projectDir: string | undefined,
   allowedDirs: string[] = [],
 ): Promise<ValidatePathResult> {
-  const resolvedPath = file_path.startsWith("/")
-    ? file_path
-    : resolve(projectDir ?? process.cwd(), file_path);
+  const resolvedPath = file_path.startsWith("/") ? file_path : resolve(projectDir ?? process.cwd(), file_path);
 
   // Resolve symlinks and check containment to prevent path traversal (#4/#5).
   // realpath throws if the path doesn't exist — treat as file-not-found.
@@ -47,14 +46,20 @@ export async function validatePath(
   try {
     realPath = await realpath(resolvedPath);
   } catch {
-    return { ok: false, error: errorResult(`Error reading file: "${file_path}" not found`) };
+    return {
+      ok: false,
+      error: errorResult(`Error reading file: "${file_path}" not found`),
+    };
   }
 
   // Reject directories, symlinks to directories, and special files (devices,
   // FIFOs, sockets). Only regular files are safe to read and write.
   const fileStat = await stat(realPath);
   if (!fileStat.isFile()) {
-    return { ok: false, error: errorResult(`"${file_path}" is not a regular file`) };
+    return {
+      ok: false,
+      error: errorResult(`"${file_path}" is not a regular file`),
+    };
   }
 
   const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -63,7 +68,7 @@ export async function validatePath(
       ok: false,
       error: errorResult(
         `"${file_path}" is too large (${(fileStat.size / 1024 / 1024).toFixed(1)} MB). ` +
-        `Maximum supported file size is 10 MB.`,
+          `Maximum supported file size is 10 MB.`,
       ),
     };
   }
@@ -74,25 +79,36 @@ export async function validatePath(
   try {
     realBase = projectDir ? projectDir : await realpath(process.cwd());
   } catch {
-    return { ok: false, error: errorResult("Project directory not found or inaccessible") };
+    return {
+      ok: false,
+      error: errorResult("Project directory not found or inaccessible"),
+    };
   }
   const allBases = [realBase, ...allowedDirs];
-  const isContained = allBases.some(
-    base => realPath === base || realPath.startsWith(base + sep),
-  );
+  const isContained = allBases.some((base) => realPath === base || realPath.startsWith(base + sep));
   if (!isContained) {
-    return { ok: false, error: errorResult(`Access denied: "${file_path}" is outside the project directory`) };
+    return {
+      ok: false,
+      error: errorResult(`Access denied: "${file_path}" is outside the project directory`),
+    };
   }
   // Evaluate deny patterns against the real path so symlinks can't bypass them.
   const denyGlobs = await readToolDenyPatterns(toolName, projectDir);
   const { denied, matchedPattern } = evaluateFilePath(realPath, denyGlobs);
   if (denied) {
-    return { ok: false, error: errorResult(`Access denied: "${file_path}" matched deny pattern "${matchedPattern}"`) };
+    return {
+      ok: false,
+      error: errorResult(`Access denied: "${file_path}" matched deny pattern "${matchedPattern}"`),
+    };
   }
 
-  return { ok: true, resolvedPath: realPath, size: fileStat.size, mtimeMs: fileStat.mtimeMs };
+  return {
+    ok: true,
+    resolvedPath: realPath,
+    size: fileStat.size,
+    mtimeMs: fileStat.mtimeMs,
+  };
 }
-
 
 // ==============================================================================
 // Content-free edit validation (for streaming pipeline)
@@ -133,7 +149,10 @@ export function validateEdits(edits: EditInput[], checksum: string): ValidateEdi
 
     // line 0 only valid for insert-after (encoded as + prefix in range)
     if (rangeRef.start.line === 0 && !rangeRef.insertAfter) {
-      return { ok: false, error: errorResult("range starting at line 0 requires insert-after (use +0: prefix)") };
+      return {
+        ok: false,
+        error: errorResult("range starting at line 0 requires insert-after (use +0: prefix)"),
+      };
     }
 
     // Verify checksum range covers edit target
@@ -143,8 +162,8 @@ export function validateEdits(edits: EditInput[], checksum: string): ValidateEdi
           ok: false,
           error: errorResult(
             `Checksum range ${checksumRef.startLine}-${checksumRef.endLine} does not cover ` +
-            `edit range ${rangeRef.start.line}-${rangeRef.end.line}. ` +
-            `Re-read with trueline_read to get a checksum covering the target lines.`,
+              `edit range ${rangeRef.start.line}-${rangeRef.end.line}. ` +
+              `Re-read with trueline_read to get a checksum covering the target lines.`,
           ),
         };
       }
@@ -166,7 +185,10 @@ export function validateEdits(edits: EditInput[], checksum: string): ValidateEdi
     if (op.insertAfter) continue;
     for (let l = op.startLine; l <= op.endLine; l++) {
       if (touchedLines.has(l)) {
-        return { ok: false, error: errorResult(`Overlapping ranges: line ${l} targeted by multiple edits`) };
+        return {
+          ok: false,
+          error: errorResult(`Overlapping ranges: line ${l} targeted by multiple edits`),
+        };
       }
       touchedLines.add(l);
     }

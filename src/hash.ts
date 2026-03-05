@@ -61,8 +61,8 @@ export function fnv1aHash(line: string): number {
  * in `handleRead`.
  */
 export function foldHash(accumulator: number, h: number): number {
-  accumulator = Math.imul(accumulator ^ (h & 0xff),          FNV_PRIME) >>> 0;
-  accumulator = Math.imul(accumulator ^ ((h >>> 8) & 0xff),  FNV_PRIME) >>> 0;
+  accumulator = Math.imul(accumulator ^ (h & 0xff), FNV_PRIME) >>> 0;
+  accumulator = Math.imul(accumulator ^ ((h >>> 8) & 0xff), FNV_PRIME) >>> 0;
   accumulator = Math.imul(accumulator ^ ((h >>> 16) & 0xff), FNV_PRIME) >>> 0;
   accumulator = Math.imul(accumulator ^ ((h >>> 24) & 0xff), FNV_PRIME) >>> 0;
   return accumulator;

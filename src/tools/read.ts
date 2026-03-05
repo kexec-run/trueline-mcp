@@ -9,16 +9,9 @@
 // ==============================================================================
 
 import { createReadStream } from "node:fs";
-import {
-  EMPTY_FILE_CHECKSUM,
-  FNV_OFFSET_BASIS,
-  fnv1aHash,
-  foldHash,
-  formatChecksum,
-  hashToLetters,
-} from "../hash.ts";
+import { EMPTY_FILE_CHECKSUM, FNV_OFFSET_BASIS, fnv1aHash, foldHash, formatChecksum, hashToLetters } from "../hash.ts";
 import { validatePath } from "./shared.ts";
-import { type ToolResult, errorResult, textResult } from "./types.ts";
+import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 interface ReadParams {
   file_path: string;

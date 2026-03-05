@@ -27,22 +27,16 @@ function parseLineHash(ref: string): LineRef {
   // Reject non-decimal strings before Number() conversion — without this,
   // Number("") === 0 and Number(" ") === 0 would silently parse as line 0.
   if (!DECIMAL_INT.test(lineStr)) {
-    throw new Error(
-      `Invalid line number in "${ref}" — must be a non-negative integer`,
-    );
+    throw new Error(`Invalid line number in "${ref}" — must be a non-negative integer`);
   }
 
   const line = Number(lineStr);
 
   if (line === 0 && hash !== "") {
-    throw new Error(
-      `Invalid line:hash reference "${ref}" — line 0 must have empty hash`,
-    );
+    throw new Error(`Invalid line:hash reference "${ref}" — line 0 must have empty hash`);
   }
   if (line > 0 && !/^[a-z]{2}$/.test(hash)) {
-    throw new Error(
-      `Invalid hash in "${ref}" — must be exactly 2 lowercase letters`,
-    );
+    throw new Error(`Invalid hash in "${ref}" — must be exactly 2 lowercase letters`);
   }
 
   return { line, hash };
@@ -77,9 +71,7 @@ export function parseRange(range: string): RangeRef {
   const dotIdx = raw.indexOf("..");
 
   if (insertAfter && dotIdx !== -1) {
-    throw new Error(
-      `Invalid range "${range}" — insert-after (+) cannot be used with a multi-line range`,
-    );
+    throw new Error(`Invalid range "${range}" — insert-after (+) cannot be used with a multi-line range`);
   }
 
   if (dotIdx === -1) {
@@ -91,9 +83,7 @@ export function parseRange(range: string): RangeRef {
   const end = parseLineHash(raw.slice(dotIdx + 2));
 
   if (start.line > end.line) {
-    throw new Error(
-      `Invalid range "${range}" — start line ${start.line} must be ≤ end line ${end.line}`,
-    );
+    throw new Error(`Invalid range "${range}" — start line ${start.line} must be ≤ end line ${end.line}`);
   }
 
   return { start, end, insertAfter };
@@ -115,16 +105,12 @@ export interface ChecksumRef {
 export function parseChecksum(checksum: string): ChecksumRef {
   const dashIdx = checksum.indexOf("-");
   if (dashIdx === -1) {
-    throw new Error(
-      `Invalid checksum "${checksum}" — expected format "startLine-endLine:hex"`,
-    );
+    throw new Error(`Invalid checksum "${checksum}" — expected format "startLine-endLine:hex"`);
   }
 
   const colonIdx = checksum.indexOf(":", dashIdx);
   if (colonIdx === -1) {
-    throw new Error(
-      `Invalid checksum "${checksum}" — expected format "startLine-endLine:hex"`,
-    );
+    throw new Error(`Invalid checksum "${checksum}" — expected format "startLine-endLine:hex"`);
   }
 
   // Slice all three parts up front, then validate formats.
@@ -141,9 +127,7 @@ export function parseChecksum(checksum: string): ChecksumRef {
     throw new Error(`Invalid checksum "${checksum}" — end line must be a decimal integer`);
   }
   if (!/^[0-9a-f]{8}$/.test(hash)) {
-    throw new Error(
-      `Invalid checksum "${checksum}" — hash must be 8 hex chars, got "${hash}"`,
-    );
+    throw new Error(`Invalid checksum "${checksum}" — hash must be 8 hex chars, got "${hash}"`);
   }
 
   const startLine = Number(startStr);
@@ -151,14 +135,10 @@ export function parseChecksum(checksum: string): ChecksumRef {
 
   // 0-0 is the empty-file sentinel; any other use of 0 is invalid.
   if (startLine === 0 && endLine !== 0) {
-    throw new Error(
-      `Invalid checksum "${checksum}" — startLine 0 requires endLine 0`,
-    );
+    throw new Error(`Invalid checksum "${checksum}" — startLine 0 requires endLine 0`);
   }
   if (startLine > endLine) {
-    throw new Error(
-      `Invalid checksum "${checksum}" — start ${startLine} must be ≤ end ${endLine}`,
-    );
+    throw new Error(`Invalid checksum "${checksum}" — start ${startLine} must be ≤ end ${endLine}`);
   }
 
   return { startLine, endLine, hash };

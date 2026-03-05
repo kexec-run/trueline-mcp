@@ -1,13 +1,13 @@
-import { realpath, mkdir } from "node:fs/promises";
+import { mkdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { handleRead } from "./tools/read.ts";
-import { handleEdit } from "./tools/edit.ts";
-import { handleDiff } from "./tools/diff.ts";
 import pkg from "../package.json";
+import { handleDiff } from "./tools/diff.ts";
+import { handleEdit } from "./tools/edit.ts";
+import { handleRead } from "./tools/read.ts";
 
 const VERSION = pkg.version;
 
@@ -67,12 +67,14 @@ server.registerTool(
     inputSchema: z.object({
       file_path: z.string(),
       checksum: z.string().describe("Checksum from trueline_read (e.g. 1-50:ab12cd34)"),
-      edits: z.array(
-        z.object({
-          range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
-          content: z.array(z.string()).describe("Replacement lines (one string per line, no \\n chars)"),
-        }),
-      ).min(1),
+      edits: z
+        .array(
+          z.object({
+            range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
+            content: z.array(z.string()).describe("Replacement lines (one string per line, no \\n chars)"),
+          }),
+        )
+        .min(1),
     }),
   },
   async (params) => {
@@ -87,12 +89,14 @@ server.registerTool(
     inputSchema: z.object({
       file_path: z.string(),
       checksum: z.string().describe("Checksum from trueline_read (e.g. 1-50:ab12cd34)"),
-      edits: z.array(
-        z.object({
-          range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
-          content: z.array(z.string()).describe("Replacement lines (one string per line, no \\n chars)"),
-        }),
-      ).min(1),
+      edits: z
+        .array(
+          z.object({
+            range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
+            content: z.array(z.string()).describe("Replacement lines (one string per line, no \\n chars)"),
+          }),
+        )
+        .min(1),
     }),
   },
   async (params) => {

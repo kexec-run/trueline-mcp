@@ -20,12 +20,12 @@
 //    to skip the atomic rename when nothing actually changed.
 // ==============================================================================
 
-import { createReadStream, createWriteStream } from "node:fs";
-import { stat, rename, chmod, unlink } from "node:fs/promises";
-import { finished } from "node:stream/promises";
-import { dirname, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import { FNV_OFFSET_BASIS, FNV_PRIME, EMPTY_FILE_CHECKSUM, foldHash, formatChecksum, hashToLetters } from "./hash.ts";
+import { createReadStream, createWriteStream } from "node:fs";
+import { chmod, rename, stat, unlink } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { finished } from "node:stream/promises";
+import { EMPTY_FILE_CHECKSUM, FNV_OFFSET_BASIS, FNV_PRIME, foldHash, formatChecksum, hashToLetters } from "./hash.ts";
 import type { ChecksumRef } from "./parse.ts";
 import type { StreamEditOp } from "./tools/shared.ts";
 
@@ -37,11 +37,7 @@ import type { StreamEditOp } from "./tools/shared.ts";
  * `fnv1aHash` performs internally. This lets us hash file content
  * without ever decoding it to a JS string.
  */
-function fnv1aHashBytes(
-  buf: Buffer,
-  start: number,
-  end: number,
-): number {
+function fnv1aHashBytes(buf: Buffer, start: number, end: number): number {
   let hash = FNV_OFFSET_BASIS;
   for (let i = start; i < end; i++) {
     hash = Math.imul(hash ^ buf[i], FNV_PRIME) >>> 0;
@@ -86,10 +82,14 @@ async function* streamByteLines(filePath: string): AsyncGenerator<ByteLine> {
     // If the previous chunk ended with \r, resolve whether it's \r\n or bare \r.
     if (prevChunkEndedWithCR) {
       prevChunkEndedWithCR = false;
-      const eol = (buf.length > 0 && buf[0] === 0x0a) ? CRLF_BUF : CR_BUF;
+      const eol = buf.length > 0 && buf[0] === 0x0a ? CRLF_BUF : CR_BUF;
       if (eol === CRLF_BUF) lineStart = 1;
       lineNumber++;
-      yield { lineBytes: flushPartials(partials, partialsLen), eolBytes: eol, lineNumber };
+      yield {
+        lineBytes: flushPartials(partials, partialsLen),
+        eolBytes: eol,
+        lineNumber,
+      };
       partials = [];
       partialsLen = 0;
     }
@@ -134,7 +134,11 @@ async function* streamByteLines(filePath: string): AsyncGenerator<ByteLine> {
       lineNumber++;
       if (partialsLen > 0) {
         partials.push(slice);
-        yield { lineBytes: flushPartials(partials, partialsLen + slice.length), eolBytes: eol, lineNumber };
+        yield {
+          lineBytes: flushPartials(partials, partialsLen + slice.length),
+          eolBytes: eol,
+          lineNumber,
+        };
         partials = [];
         partialsLen = 0;
       } else {
@@ -176,7 +180,6 @@ type StreamingEditResult =
   | { ok: true; newChecksum: string; changed: boolean; tmpPath?: string }
   | { ok: false; error: string };
 
-
 function buffersEqual(a: Buffer[], b: Buffer[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
@@ -208,7 +211,7 @@ export async function streamingEdit(
     // Same type at same line: preserve input order
     return a.i - b.i;
   });
-  const sortedOps = indexed.map(x => x.op);
+  const sortedOps = indexed.map((x) => x.op);
 
   // ---- Build lookup structures ----
 
@@ -232,7 +235,9 @@ export async function streamingEdit(
   // Single error listener — `drain()` checks this during streaming, and
   // `finished()` surfaces errors during `end()`.
   let writeError: Error | null = null;
-  outStream.on("error", (err) => { writeError = err; });
+  outStream.on("error", (err) => {
+    writeError = err;
+  });
 
   // Await backpressure drain to prevent unbounded buffering in the writable
   // stream's internal buffer, which would defeat the memory-efficiency goal.
@@ -242,18 +247,18 @@ export async function streamingEdit(
   }
 
   // ---- State ----
-  let detectedEol: Buffer = LF_BUF;  // default, updated from first line ending
+  let detectedEol: Buffer = LF_BUF; // default, updated from first line ending
   let eolDetected = false;
   let contentChanged = false;
   let totalLines = 0;
-  let pendingWrite: Buffer | null = null;  // buffered output line (no EOL)
-  let lastEolBytes: Buffer = EMPTY_BUF;    // EOL of the last source line seen
+  let pendingWrite: Buffer | null = null; // buffered output line (no EOL)
+  let lastEolBytes: Buffer = EMPTY_BUF; // EOL of the last source line seen
   let outputLineCount = 0;
   let outputChecksumAcc = FNV_OFFSET_BASIS; // full-file checksum of output
 
   // Track which replace op we're currently inside (skipping source lines)
   let activeReplace: StreamEditOp | null = null;
-  let activeReplaceOrigBytes: Buffer[] = [];  // original line bytes for no-op detection
+  let activeReplaceOrigBytes: Buffer[] = []; // original line bytes for no-op detection
 
   // ---- Helpers ----
 
@@ -279,8 +284,12 @@ export async function streamingEdit(
   }
 
   async function cleanupTmp(): Promise<void> {
-    outStream.destroy();  // harmless no-op if already ended
-    try { await unlink(tmpPath); } catch { /* best-effort */ }
+    outStream.destroy(); // harmless no-op if already ended
+    try {
+      await unlink(tmpPath);
+    } catch {
+      /* best-effort */
+    }
   }
 
   async function fail(error: string): Promise<StreamingEditResult> {
@@ -293,7 +302,7 @@ export async function streamingEdit(
   }
 
   async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[]): Promise<void> {
-    const replacementBufs = op.content.map(s => Buffer.from(s, "utf-8"));
+    const replacementBufs = op.content.map((s) => Buffer.from(s, "utf-8"));
     if (buffersEqual(replacementBufs, origBytes)) {
       for (const buf of origBytes) await enqueueLine(buf);
     } else {
@@ -303,9 +312,7 @@ export async function streamingEdit(
   }
 
   function outputChecksumStr(): string {
-    return outputLineCount > 0
-      ? formatChecksum(1, outputLineCount, outputChecksumAcc)
-      : EMPTY_FILE_CHECKSUM;
+    return outputLineCount > 0 ? formatChecksum(1, outputLineCount, outputChecksumAcc) : EMPTY_FILE_CHECKSUM;
   }
 
   function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
@@ -480,8 +487,7 @@ export async function streamingEdit(
     // Check if checksum range exceeds file length
     if (checksumRef.endLine > totalLines) {
       return await fail(
-        `Checksum range ${checksumRef.startLine}-${checksumRef.endLine} exceeds ` +
-        `file length (${totalLines} lines)`,
+        `Checksum range ${checksumRef.startLine}-${checksumRef.endLine} exceeds ` + `file length (${totalLines} lines)`,
       );
     }
 
@@ -503,13 +509,16 @@ export async function streamingEdit(
         }
       }
 
-      const base = `Checksum mismatch for lines ${checksumRef.startLine}-${checksumRef.endLine}: ` +
+      const base =
+        `Checksum mismatch for lines ${checksumRef.startLine}-${checksumRef.endLine}: ` +
         `expected ${expected}, got ${actual}. File changed since last read.`;
 
       if (minLine !== Infinity) {
         return {
           ok: false,
-          error: base + `\n\n` +
+          error:
+            base +
+            `\n\n` +
             `However, lines ${minLine}-${maxLine} appear unchanged. ` +
             `Re-read with trueline_read(start_line=${minLine}, end_line=${maxLine}) ` +
             `to get a narrow checksum, then retry the edit.`,
@@ -529,7 +538,12 @@ export async function streamingEdit(
       await cleanupTmp();
       return { ok: true, newChecksum: outputChecksumStr(), changed: false };
     }
-    return { ok: true, newChecksum: outputChecksumStr(), changed: false, tmpPath };
+    return {
+      ok: true,
+      newChecksum: outputChecksumStr(),
+      changed: false,
+      tmpPath,
+    };
   }
 
   // ---- Atomic rename with mtime check ----

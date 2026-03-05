@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
-import { resolve } from "node:path";
 import { homedir } from "node:os";
+import { resolve } from "node:path";
 
 // ==============================================================================
 // Module-level caches
@@ -22,9 +22,7 @@ const regexCache = new Map<string, RegExp>();
  * Parse any tool permission pattern like "ToolName(glob)".
  * Returns { tool, glob } or null if not a valid pattern.
  */
-export function parseToolPattern(
-  pattern: string,
-): { tool: string; glob: string } | null {
+export function parseToolPattern(pattern: string): { tool: string; glob: string } | null {
   // .+ is greedy: for "Read(some(path))" it captures "some(path)"
   // because $ forces the final \) to match only the last paren.
   const match = pattern.match(/^(\w+)\((.+)\)$/);
@@ -43,10 +41,7 @@ export function parseToolPattern(
  * - `?` matches a single non-separator character
  * - Paths are matched with forward slashes (callers normalize first)
  */
-export function fileGlobToRegex(
-  glob: string,
-  caseInsensitive: boolean = false,
-): RegExp {
+export function fileGlobToRegex(glob: string, caseInsensitive: boolean = false): RegExp {
   const cacheKey = `${glob}:${caseInsensitive}`;
   const cached = regexCache.get(cacheKey);
   if (cached) return cached;
@@ -58,19 +53,21 @@ export function fileGlobToRegex(
 
   // Tokenize the glob: match globstar+slash, globstar, single-star, question
   // mark, or a run of literal characters — then map each token to its regex.
-  const regexStr = glob.replace(
-    /\*\*\/|\*\*|\*|\?|[^*?]+/g,
-    (token, offset) => {
-      const atBoundary = offset === 0 || glob[offset - 1] === "/";
-      switch (token) {
-        case "**/": return atBoundary ? "(.*/)?" : "[^/]*/";
-        case "**":  return atBoundary ? ".*" : "[^/]*";
-        case "*":   return "[^/]*";
-        case "?":   return "[^/]";
-        default:    return token.replace(/[.+^${}()|[\]\\\/-]/g, "\\$&");
-      }
-    },
-  );
+  const regexStr = glob.replace(/\*\*\/|\*\*|\*|\?|[^*?]+/g, (token, offset) => {
+    const atBoundary = offset === 0 || glob[offset - 1] === "/";
+    switch (token) {
+      case "**/":
+        return atBoundary ? "(.*/)?" : "[^/]*/";
+      case "**":
+        return atBoundary ? ".*" : "[^/]*";
+      case "*":
+        return "[^/]*";
+      case "?":
+        return "[^/]";
+      default:
+        return token.replace(/[.+^${}()|[\]\\/-]/g, "\\$&");
+    }
+  });
 
   const re = new RegExp(`^${regexStr}$`, caseInsensitive ? "i" : "");
   regexCache.set(cacheKey, re);
@@ -120,7 +117,12 @@ export async function readToolDenyPatterns(
     }
 
     // Extract globs for the target tool from permissions.deny.
-    const denyArr = (parsed as any)?.permissions?.deny;
+    const obj = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : undefined;
+    const perms =
+      typeof obj?.permissions === "object" && obj.permissions !== null
+        ? (obj.permissions as Record<string, unknown>)
+        : undefined;
+    const denyArr = perms?.deny;
     const globs: string[] = [];
     if (Array.isArray(denyArr)) {
       for (const entry of denyArr) {
@@ -138,9 +140,7 @@ export async function readToolDenyPatterns(
     paths.push(resolve(projectDir, ".claude", "settings.local.json"));
     paths.push(resolve(projectDir, ".claude", "settings.json"));
   }
-  paths.push(
-    globalSettingsPath ?? resolve(homedir(), ".claude", "settings.json"),
-  );
+  paths.push(globalSettingsPath ?? resolve(homedir(), ".claude", "settings.json"));
 
   // Read all settings files in parallel — they're independent.
   const allGlobs = await Promise.all(paths.map(extractGlobs));
@@ -179,8 +179,8 @@ export function evaluateFilePath(
     // e.g. "src/.env" should match "/project/src/.env".
     if (!glob.startsWith("/") && !glob.startsWith("*")) {
       const norm = caseInsensitive ? normalized.toLowerCase() : normalized;
-      const pat  = caseInsensitive ? glob.toLowerCase() : glob;
-      return norm.endsWith("/" + pat) || norm === pat;
+      const pat = caseInsensitive ? glob.toLowerCase() : glob;
+      return norm.endsWith(`/${pat}`) || norm === pat;
     }
 
     return false;
