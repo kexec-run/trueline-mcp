@@ -86,6 +86,10 @@ hallucination are rejected before they corrupt your code.
 If `old_string` isn't unique and extra context is needed, built-in Edit
 cost rises further — trueline stays constant.
 
+Multi-range reads also save **input tokens**: instead of re-reading an
+entire file to edit two distant sections, the agent reads only the
+ranges it needs — skipping hundreds of irrelevant lines.
+
 ## How it works
 
 `trueline_read` returns file content in trueline format. It supports reading
