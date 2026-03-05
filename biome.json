@@ -6,7 +6,15 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/dist", "!**/build", "!tests/fixtures/", "!tests/benchmark-results-v04.json"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/build",
+      "!tests/fixtures/",
+      "!tests/benchmark-results-v04.json",
+      "!package.json",
+      "!.claude-plugin/"
+    ]
   },
   "formatter": {
     "enabled": true,
