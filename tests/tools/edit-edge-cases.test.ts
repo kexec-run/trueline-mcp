@@ -1001,7 +1001,8 @@ describe("special content", () => {
 // =============================================================================
 
 describe("file metadata", () => {
-  test("file permissions are preserved after edit", async () => {
+  // Windows doesn't support Unix file permissions — chmod is a no-op.
+  test.skipIf(process.platform === "win32")("file permissions are preserved after edit", async () => {
     const { path, cs } = setupFile("perms.txt", "aaa\nbbb\n");
 
     // Make file executable
