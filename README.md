@@ -8,6 +8,13 @@ Each line is tagged with a short hash. Before writing, the server verifies that
 the lines being replaced still match the hashes the agent observed — catching
 stale edits caused by concurrent changes or model hallucination.
 
+## Installation
+
+```
+/plugin marketplace add rjkaes/trueline-mcp
+/plugin install trueline-mcp@trueline-mcp
+```
+
 ## Why Trueline?
 
 Trueline saves tokens on every edit — and catches mistakes the built-in
@@ -78,16 +85,6 @@ hallucination are rejected before they corrupt your code.
 
 If `old_string` isn't unique and extra context is needed, built-in Edit
 cost rises further — trueline stays constant.
-
-## Installation
-
-```
-/plugin marketplace add rjkaes/trueline-mcp
-/plugin install trueline-mcp@trueline-mcp
-```
-
-The plugin binary is downloaded automatically on first use. No build step
-required.
 
 ## How it works
 
