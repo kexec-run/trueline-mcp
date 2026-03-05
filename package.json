@@ -4,6 +4,14 @@
   "type": "module",
   "description": "Truth-verified file editing for Claude Code agents",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rjkaes/trueline-mcp.git"
+  },
+  "homepage": "https://github.com/rjkaes/trueline-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/rjkaes/trueline-mcp/issues"
+  },
   "scripts": {
     "dev": "bun run src/server.ts",
     "build": "bun build src/server.ts --target=node --outfile dist/server.js",

@@ -12,7 +12,15 @@
         "source": "github",
         "repo": "rjkaes/trueline-mcp"
       },
-      "description": "Truth-verified file editing for Claude Code agents"
+      "description": "Truth-verified file editing for Claude Code agents",
+      "keywords": [
+        "mcp",
+        "trueline",
+        "editing",
+        "verification",
+        "hash",
+        "file-editing"
+      ]
     }
   ]
 }

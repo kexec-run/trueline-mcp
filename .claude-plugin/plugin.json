@@ -3,8 +3,11 @@
   "version": "0.7.0",
   "description": "Truth-verified file editing for Claude Code agents",
   "author": {
-    "name": "rjk"
+    "name": "rjk",
+    "url": "https://github.com/rjkaes"
   },
+  "homepage": "https://github.com/rjkaes/trueline-mcp#readme",
+  "repository": "https://github.com/rjkaes/trueline-mcp",
   "license": "Apache-2.0",
   "keywords": [
     "mcp",

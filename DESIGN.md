@@ -47,7 +47,7 @@ The **hash** is two lowercase letters derived from the line's content
 via FNV-1a (a fast, non-cryptographic hash). Two letters give 676
 possible values — enough to catch accidental mismatches, not enough to
 be a security mechanism. The format matches the
-[vscode-hashline-edit-tool](https://github.com/nicobailon/vscode-hashline-edit-tool)
+[vscode-hashline-edit-tool](https://github.com/sethml/vscode-hashline-edit-tool)
 spec for interoperability.
 
 The **checksum** covers the entire range of lines returned. Its format
