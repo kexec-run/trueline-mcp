@@ -11,11 +11,12 @@
 // ==============================================================================
 
 import { streamingEdit } from "../streaming-edit.ts";
-import { type EditInput, type StreamEditOp, validateEdits, validatePath } from "./shared.ts";
+import { type EditInput, type StreamEditOp, validateEdits, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
 interface EditParams {
   file_path: string;
+  encoding?: string;
   edits: EditInput[];
   projectDir?: string;
   allowedDirs?: string[];
@@ -28,12 +29,19 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   const validated = await validatePath(file_path, "Edit", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
+  let enc: BufferEncoding;
+  try {
+    enc = validateEncoding(params.encoding);
+  } catch (err: unknown) {
+    return errorResult((err as Error).message);
+  }
+
   const { resolvedPath, mtimeMs } = validated;
 
   const built = validateEdits(edits);
   if (!built.ok) return built.error;
 
-  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs);
+  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, false, enc);
 
   if (!result.ok) {
     return errorResult(result.error);

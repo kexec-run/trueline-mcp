@@ -3,8 +3,22 @@ import { mkdtempSync, realpathSync, writeFileSync, readFileSync, mkdirSync, rmSy
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleEdit } from "../../src/tools/edit.ts";
-import { lineHash } from "../helpers.ts";
-import { rangeChecksum } from "../helpers.ts";
+import { fnv1aHashBytes, FNV_OFFSET_BASIS, foldHash, formatChecksum, hashToLetters } from "../../src/hash.ts";
+import { lineHash, rangeChecksum } from "../helpers.ts";
+
+// Helper to compute hashes from raw bytes (for non-UTF-8 test files)
+function rawLineHash(buf: Buffer): string {
+  const h = fnv1aHashBytes(buf, 0, buf.length);
+  return hashToLetters(h);
+}
+
+function rawRangeChecksum(bufs: Buffer[], startLine: number, endLine: number): string {
+  let hash = FNV_OFFSET_BASIS;
+  for (let i = 0; i < bufs.length; i++) {
+    hash = foldHash(hash, fnv1aHashBytes(bufs[i], 0, bufs[i].length));
+  }
+  return formatChecksum(startLine, endLine, hash);
+}
 
 let testDir: string;
 let testFile: string;
@@ -396,5 +410,37 @@ describe("handleEdit", () => {
 
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("denied");
+  });
+
+  test("edits a latin1 file preserving encoding", async () => {
+    // "café\nnaïve\n" in latin1
+    const line1 = Buffer.from([0x63, 0x61, 0x66, 0xe9]); // café
+    const line2 = Buffer.from([0x6e, 0x61, 0xef, 0x76, 0x65]); // naïve
+    const fileBytes = Buffer.concat([line1, Buffer.from("\n"), line2, Buffer.from("\n")]);
+    const latin1File = join(testDir, "latin1.txt");
+    writeFileSync(latin1File, fileBytes);
+
+    const cs = rawRangeChecksum([line1, line2], 1, 2);
+    const h1 = rawLineHash(line1);
+
+    const result = await handleEdit({
+      file_path: latin1File,
+      encoding: "latin1",
+      edits: [
+        {
+          checksum: cs,
+          range: `1:${h1}..1:${h1}`,
+          content: "résumé",
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    // Verify the written file uses latin1 encoding
+    const written = readFileSync(latin1File);
+    // "résumé" in latin1: r=0x72, é=0xe9, s=0x73, u=0x75, m=0x6d, é=0xe9
+    expect(written[0]).toBe(0x72); // r
+    expect(written[1]).toBe(0xe9); // é (latin1, not UTF-8's 0xc3 0xa9)
   });
 });

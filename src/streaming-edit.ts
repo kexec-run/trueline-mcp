@@ -78,6 +78,7 @@ export async function streamingEdit(
   checksumRefs: ChecksumRef[],
   mtimeMs: number,
   dryRun = false,
+  encoding: BufferEncoding = "utf-8",
 ): Promise<StreamingEditResult> {
   // ---- Sort ops ascending by startLine, insert_after after replace at same line ----
   const indexed = ops.map((op, i) => ({ op, i }));
@@ -176,7 +177,7 @@ export async function streamingEdit(
   }
 
   async function enqueueString(s: string): Promise<void> {
-    await enqueueLine(Buffer.from(s, "utf-8"));
+    await enqueueLine(Buffer.from(s, encoding));
   }
 
   async function cleanupTmp(): Promise<void> {
@@ -202,7 +203,7 @@ export async function streamingEdit(
   // replacement strings to Buffers once and reuses them for both the
   // comparison and the output write to avoid double allocation.
   async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[]): Promise<void> {
-    const replacementBufs = op.content.map((s) => Buffer.from(s, "utf-8"));
+    const replacementBufs = op.content.map((s) => Buffer.from(s, encoding));
     if (buffersEqual(replacementBufs, origBytes)) {
       for (const buf of origBytes) await enqueueLine(buf);
     } else {
