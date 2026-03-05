@@ -4,10 +4,7 @@ export function processHookEvent(event) {
   if (event.tool_name === "Edit" || event.tool_name === "MultiEdit") {
     return {
       decision: "block",
-      reason:
-        "<trueline_redirect>" +
-        "Edit is blocked. Use trueline_read then trueline_edit." +
-        "</trueline_redirect>",
+      reason: "<trueline_redirect>" + "Edit is blocked. Use trueline_read then trueline_edit." + "</trueline_redirect>",
     };
   }
 

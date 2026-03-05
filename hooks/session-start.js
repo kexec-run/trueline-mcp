@@ -24,7 +24,9 @@ export const getSessionStartInstructions = getInstructions;
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let input = "";
   process.stdin.setEncoding("utf-8");
-  process.stdin.on("data", (chunk) => { input += chunk; });
+  process.stdin.on("data", (chunk) => {
+    input += chunk;
+  });
   process.stdin.on("end", () => {
     const instructions = getInstructions();
     let event = "SessionStart";
@@ -36,12 +38,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     }
 
     if (event === "SubagentStart") {
-      process.stdout.write(JSON.stringify({
-        hookSpecificOutput: {
-          hookEventName: "SubagentStart",
-          additionalContext: instructions,
-        },
-      }));
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "SubagentStart",
+            additionalContext: instructions,
+          },
+        }),
+      );
     } else {
       process.stdout.write(instructions);
     }

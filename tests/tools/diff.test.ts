@@ -135,7 +135,7 @@ describe("handleDiff", () => {
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     expect(text).toContain("-line 2");
-    expect(text).not.toMatch(/^\+(?![\+\-])/m); // no added lines (header lines start with +++)
+    expect(text).not.toMatch(/^\+(?![+-])/m); // no added lines (header lines start with +++)
   });
 
   test("identical content produces only context lines", async () => {

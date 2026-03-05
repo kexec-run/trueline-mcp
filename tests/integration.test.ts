@@ -46,6 +46,7 @@ describe("read → diff → edit roundtrip", () => {
       edits: [
         {
           range: `2:${line2Hash}..2:${line2Hash}`,
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
           content: ["  return `Hello, ${name}!`;"],
         },
       ],
@@ -67,6 +68,7 @@ describe("read → diff → edit roundtrip", () => {
       edits: [
         {
           range: `2:${line2Hash}..2:${line2Hash}`,
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: test content is source code with template literals
           content: ["  return `Hello, ${name}!`;"],
         },
       ],
@@ -76,6 +78,7 @@ describe("read → diff → edit roundtrip", () => {
 
     // Step 4: Verify file changed
     const afterEdit = readFileSync(testFile, "utf-8");
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: verifying written source code content
     expect(afterEdit).toContain("`Hello, ${name}!`");
     expect(afterEdit).not.toContain('"Hello, " + name');
 

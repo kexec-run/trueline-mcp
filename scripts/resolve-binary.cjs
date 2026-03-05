@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 "use strict";
 
-const { spawn, execFileSync } = require("child_process");
-const path = require("path");
+const { spawn, execFileSync } = require("node:child_process");
+const path = require("node:path");
 
 const pluginRoot = path.join(__dirname, "..");
 

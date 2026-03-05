@@ -1056,7 +1056,7 @@ describe("large file edits", () => {
     const lines: string[] = [];
     for (let i = 0; i < 1000; i++) lines.push(`line ${i + 1}`);
     const content = lines.join("\n") + "\n";
-    const { path, cs } = setupFile("large.txt", content);
+    const { path } = setupFile("large.txt", content);
 
     const target = "line 500";
     const h500 = lineHash(target);

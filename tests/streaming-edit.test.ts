@@ -2,7 +2,6 @@ import { describe, expect, test, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { fnv1aHash, FNV_OFFSET_BASIS } from "../src/hash.ts";
 import { lineHash, rangeChecksum } from "./helpers.ts";
 import { validateEdits } from "../src/tools/shared.ts";
 import { streamingEdit } from "../src/streaming-edit.ts";
