@@ -49,7 +49,7 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
   }
 
   return textResult(
-    `Edit applied successfully. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nchecksum: ${result.newChecksum}`,
+    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nchecksum: ${result.newChecksum}`,
   );
 }
 
