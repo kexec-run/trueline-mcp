@@ -8,6 +8,78 @@ Each line is tagged with a short hash. Before writing, the server verifies that
 the lines being replaced still match the hashes the agent observed — catching
 stale edits caused by concurrent changes or model hallucination.
 
+
+## Why Trueline?
+
+Trueline saves tokens on every edit — and catches mistakes the built-in
+tools can't.
+
+### Fewer output tokens
+
+Claude Code's built-in `Edit` tool uses string matching: the model must
+echo back the exact text being replaced (`old_string`) plus the
+replacement (`new_string`). The old text is pure overhead — it's already
+in the file.
+
+```json
+// Built-in Edit — model must output the old text to locate the edit
+{
+  "file_path": "src/server.ts",
+  "old_string": "export function handleRequest(req: Request) {\n  const body = await req.json();\n  validate(body);\n  return process(body);\n}",
+  "new_string": "export function handleRequest(req: Request) {\n  const body = await req.json();\n  const parsed = schema.parse(body);\n  return process(parsed);\n}"
+}
+```
+
+trueline_edit replaces the old text with a compact line-range reference:
+
+```json
+// trueline_edit — just the range and the new content
+{
+  "file_path": "src/server.ts",
+  "checksum": "1-50:a3b1c2d4",
+  "edits": [{
+    "range": "12:kf..16:qz",
+    "content": "export function handleRequest(req: Request) {\n  const body = await req.json();\n  const parsed = schema.parse(body);\n  return process(parsed);\n}"
+  }]
+}
+```
+
+The model never echoes the old text. For a typical 15-line edit, that's
+**~200 fewer output tokens per edit** — the most expensive token class.
+
+### No uniqueness problem
+
+The built-in `Edit` fails if `old_string` appears more than once in the
+file, forcing the model to include extra context lines until the match is
+unique. trueline_edit addresses lines directly — no ambiguity, no wasted
+context.
+
+### Batch edits in one call
+
+The built-in `Edit` handles one replacement per call. trueline_edit
+accepts an array of edits applied atomically in a single call, cutting
+tool-call overhead for multi-site changes.
+
+### Hash verification catches mistakes
+
+Per-line hashes and range checksums verify that the file hasn't changed
+since the model read it. Stale edits from concurrent changes or model
+hallucination are rejected before they corrupt your code.
+
+### Cost comparison
+
+| Scenario: replace 15 lines in a 200-line file | Built-in Edit | trueline_edit |
+|------------------------------------------------|---------------|---------------|
+| Old text echoed back (output tokens)           | ~225          | 0             |
+| New text (output tokens)                       | ~225          | ~225          |
+| Range/checksum overhead                        | 0             | ~13           |
+| Boilerplate                                    | ~20           | ~25           |
+| **Total output tokens**                        | **~470**      | **~263**      |
+| **Savings**                                    |               | **44%**       |
+
+If `old_string` isn't unique and extra context is needed, built-in Edit
+cost rises further — trueline stays constant.
+
 ## Installation
 
 ```
