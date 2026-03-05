@@ -54,6 +54,22 @@ export function fnv1aHash(line: string): number {
 }
 
 /**
+ * Compute FNV-1a 32-bit hash directly on raw bytes in a Buffer.
+ *
+ * Equivalent to `fnv1aHash(str)` when the buffer contains the UTF-8
+ * encoding of `str`, but works on any encoding. This is the canonical
+ * hash function — both read and edit paths use it to hash raw file bytes,
+ * making hashes encoding-independent.
+ */
+export function fnv1aHashBytes(buf: Buffer, start: number, end: number): number {
+  let hash = FNV_OFFSET_BASIS;
+  for (let i = start; i < end; i++) {
+    hash = Math.imul(hash ^ buf[i], FNV_PRIME) >>> 0;
+  }
+  return hash;
+}
+
+/**
  * Fold a 32-bit line hash into a running checksum accumulator.
  *
  * Feeds all 4 bytes of `h` (little-endian) into the FNV-1a accumulator.

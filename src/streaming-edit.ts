@@ -25,7 +25,14 @@ import { createWriteStream } from "node:fs";
 import { chmod, rename, stat, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { finished } from "node:stream/promises";
-import { EMPTY_FILE_CHECKSUM, FNV_OFFSET_BASIS, FNV_PRIME, foldHash, formatChecksum, hashToLetters } from "./hash.ts";
+import {
+  EMPTY_FILE_CHECKSUM,
+  FNV_OFFSET_BASIS,
+  fnv1aHashBytes,
+  foldHash,
+  formatChecksum,
+  hashToLetters,
+} from "./hash.ts";
 import { EMPTY_BUF, LF_BUF, splitLines } from "./line-splitter.ts";
 import type { ChecksumRef } from "./parse.ts";
 
@@ -40,22 +47,6 @@ export interface StreamEditOp {
   insertAfter: boolean;
   startHash: string;
   endHash: string;
-}
-
-/**
- * Compute FNV-1a 32-bit hash directly on raw UTF-8 bytes in a Buffer.
- *
- * Equivalent to `fnv1aHash(str)` when the buffer contains the UTF-8
- * encoding of `str`, but avoids the JS string -> UTF-8 re-encoding that
- * `fnv1aHash` performs internally. This lets us hash file content
- * without ever decoding it to a JS string.
- */
-function fnv1aHashBytes(buf: Buffer, start: number, end: number): number {
-  let hash = FNV_OFFSET_BASIS;
-  for (let i = start; i < end; i++) {
-    hash = Math.imul(hash ^ buf[i], FNV_PRIME) >>> 0;
-  }
-  return hash;
 }
 
 // ==============================================================================
