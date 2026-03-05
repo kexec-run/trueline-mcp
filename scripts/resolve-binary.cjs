@@ -11,10 +11,19 @@ const pluginRoot = path.join(__dirname, "..");
 // ==============================================================================
 
 // Prefer bun: it runs the TypeScript source directly with no build step.
-// Fall back to node with a pre-bundled JS file committed to the repo.
+// Then try deno, then fall back to node — both use the pre-bundled JS file.
 function hasBun() {
   try {
     execFileSync("bun", ["--version"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hasDeno() {
+  try {
+    execFileSync("deno", ["--version"], { stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -29,6 +38,9 @@ let cmd, args;
 if (hasBun()) {
   cmd = "bun";
   args = [path.join(pluginRoot, "src", "server.ts")];
+} else if (hasDeno()) {
+  cmd = "deno";
+  args = ["run", "-A", path.join(pluginRoot, "dist", "server.js")];
 } else {
   cmd = "node";
   args = [path.join(pluginRoot, "dist", "server.js")];
