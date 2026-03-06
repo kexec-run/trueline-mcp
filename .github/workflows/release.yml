@@ -50,4 +50,10 @@ jobs:
             --title "$TAG" \
             --notes-file "${{ steps.changelog.outputs.changelog }}"
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        env:
+          NPM_CONFIG_PROVENANCE: true
+        run: |
+          # Remove the token-based auth that setup-node wrote;
+          # Trusted Publishing uses OIDC instead.
+          npm config delete //registry.npmjs.org/:_authToken
+          npm publish --access public
