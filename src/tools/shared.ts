@@ -62,17 +62,6 @@ export async function validatePath(
       error: errorResult(`"${file_path}" is not a regular file`),
     };
   }
-
-  const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
-  if (fileStat.size > MAX_FILE_BYTES) {
-    return {
-      ok: false,
-      error: errorResult(
-        `"${file_path}" is too large (${(fileStat.size / 1024 / 1024).toFixed(1)} MB). ` +
-          `Maximum supported file size is 10 MB.`,
-      ),
-    };
-  }
   // Build the list of allowed base directories. projectDir (or cwd) is
   // always included; additional dirs come from the caller (e.g. ~/.claude/,
   // TRUELINE_ALLOWED_DIRS).  All bases are resolved through realpath so that

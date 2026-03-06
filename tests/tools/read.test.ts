@@ -161,4 +161,37 @@ describe("handleRead", () => {
     // And the hash should be present
     expect(text).toMatch(/^1:[a-z]{2}\|café$/m);
   });
+
+  test("truncates output at 2000 lines", async () => {
+    // Generate a file with 3000 lines
+    const bigFile = join(testDir, "big.ts");
+    const lines = Array.from({ length: 3000 }, (_, i) => `const x${i} = ${i};`);
+    writeFileSync(bigFile, `${lines.join("\n")}\n`);
+
+    const result = await handleRead({ file_path: bigFile, allowedDirs: [testDir] });
+    expect(result.isError).toBeUndefined();
+    const text = (result.content[0] as { text: string }).text;
+
+    // Should have a checksum covering only the returned lines
+    expect(text).toMatch(/checksum: 1-2000:[0-9a-f]{8}/);
+    // Should include truncation notice
+    expect(text).toContain("truncated");
+    expect(text).toContain("2000 line limit");
+    // Should NOT contain line 2001
+    expect(text).not.toContain("2001:");
+  });
+
+  test("does not truncate when ranges stay under limit", async () => {
+    // Same big file, but read only 100 lines
+    const bigFile = join(testDir, "big.ts");
+    const result = await handleRead({
+      file_path: bigFile,
+      ranges: [{ start: 100, end: 199 }],
+      allowedDirs: [testDir],
+    });
+    expect(result.isError).toBeUndefined();
+    const text = (result.content[0] as { text: string }).text;
+    expect(text).not.toContain("truncated");
+    expect(text).toMatch(/checksum: 100-199:[0-9a-f]{8}/);
+  });
 });

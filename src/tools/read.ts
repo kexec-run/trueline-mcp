@@ -69,6 +69,8 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     return errorResult((err as Error).message);
   }
 
+  const MAX_OUTPUT_LINES = 2000;
+  const MAX_OUTPUT_BYTES = 20 * 1024 * 1024; // 20 MB
   const LF = Buffer.from("\n");
   const outputChunks: Buffer[] = [];
   let outputLen = 0;
@@ -78,6 +80,8 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   let rangeFirstLine = 0;
   let rangeLastLine = 0;
   let totalLines = 0;
+  let outputLines = 0;
+  let truncated = false;
 
   try {
     for await (const { lineBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: true })) {
@@ -110,15 +114,22 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
       // Within current range — hash and output
       if (rangeFirstLine === 0) rangeFirstLine = lineNumber;
-      rangeLastLine = lineNumber;
-      const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
-      rangeChecksumHash = foldHash(rangeChecksumHash, h);
 
-      // Build line as raw bytes: "lineNumber:hash|" prefix (ASCII) + raw line bytes + LF.
-      // Avoids per-line Buffer.toString() — single decode at the end.
+      const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
       const prefix = Buffer.from(`${lineNumber}:${hashToLetters(h)}|`);
+      const lineLen = prefix.length + lineBytes.length + 1;
+
+      // Check output limits before committing this line
+      outputLines++;
+      if (outputLines > MAX_OUTPUT_LINES || outputLen + lineLen > MAX_OUTPUT_BYTES) {
+        truncated = true;
+        break;
+      }
+
+      rangeLastLine = lineNumber;
+      rangeChecksumHash = foldHash(rangeChecksumHash, h);
       outputChunks.push(prefix, lineBytes, LF);
-      outputLen += prefix.length + lineBytes.length + 1;
+      outputLen += lineLen;
     }
   } catch (err: unknown) {
     if (err instanceof Error && err.message.includes("binary")) {
@@ -128,21 +139,30 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   }
 
   // Empty file
-  if (totalLines === 0) {
+  if (totalLines === 0 && !truncated) {
     return textResult(`(empty file)\n\nchecksum: ${EMPTY_FILE_CHECKSUM}`);
   }
 
   // Check if first range's start is out of range
-  if (ranges[0].start > totalLines) {
+  if (rangeFirstLine === 0 && ranges[0].start > totalLines) {
     return errorResult(`start_line ${ranges[0].start} out of range (file has ${totalLines} lines)`);
   }
 
-  // Emit checksum for the last range
-  if (rangeFirstLine > 0) {
+  // Emit checksum for the last range (only if we output any lines in it)
+  if (rangeFirstLine > 0 && rangeLastLine > 0) {
     const checksumLine = `\nchecksum: ${formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash)}`;
     const cb = Buffer.from(checksumLine);
     outputChunks.push(cb);
     outputLen += cb.length;
+  }
+
+  // Append truncation notice so the agent knows to use narrower ranges
+  if (truncated) {
+    const reason = outputLines > MAX_OUTPUT_LINES ? `${MAX_OUTPUT_LINES} line` : "20 MB output";
+    const notice = `\n\n(truncated — ${reason} limit reached. Use ranges to read specific sections.)`;
+    const nb = Buffer.from(notice);
+    outputChunks.push(nb);
+    outputLen += nb.length;
   }
 
   return textResult(Buffer.concat(outputChunks, outputLen).toString(enc));
