@@ -177,6 +177,14 @@ plans, memory, and settings). To allow additional directories on any
 platform, set `TRUELINE_ALLOWED_DIRS` to a colon-separated list of paths
 (semicolon-separated on Windows).
 
+## Runtime Engine Selection
+
+trueline runs on Bun, Deno, and Node.js. It will use whichever runtime is
+available on your system, but the choice matters for performance. Bun is the
+fastest by a comfortable margin, followed by Deno, with Node.js coming in last.
+If you have the option, install [Bun](https://bun.sh) — you'll notice the
+difference on large files and batch edits.
+
 ## Development
 
 Requires [Bun](https://bun.sh) ≥ 1.3.
