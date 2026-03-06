@@ -12,8 +12,8 @@
 //  - Pending-write pattern: each output line is buffered and flushed when the
 //    next line arrives, so the last line can omit its EOL if the original file
 //    had no trailing newline.
-//  - Backpressure: `outStream.write()` return values are checked and `drain`
-//    events are awaited to prevent unbounded buffering.
+//  - Buffered fd writes: small writes accumulate in a 64KB buffer and flush
+//    via `fs.write()` to minimize syscalls (much faster than createWriteStream).
 //  - EOL detection from first line ending since we cannot rescan during a
 //    single pass.
 //  - No-op detection: byte-compares replacement content against original lines
@@ -21,10 +21,8 @@
 // ==============================================================================
 
 import { randomBytes } from "node:crypto";
-import { createWriteStream } from "node:fs";
-import { chmod, rename, stat, unlink } from "node:fs/promises";
+import { chmod, open, rename, stat, unlink } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { finished } from "node:stream/promises";
 import {
   EMPTY_FILE_CHECKSUM,
   FNV_OFFSET_BASIS,
@@ -115,34 +113,34 @@ export async function streamingEdit(
   const dir = dirname(resolvedPath);
   const tmpName = `.trueline-tmp-${randomBytes(6).toString("hex")}`;
   const tmpPath = resolve(dir, tmpName);
-  const outStream = createWriteStream(tmpPath);
+  const fd = await open(tmpPath, "w");
 
-  // Single error listener — `drain()` checks this during streaming, and
-  // `finished()` surfaces errors during `end()`.
-  let writeError: Error | null = null;
-  outStream.on("error", (err) => {
-    writeError = err;
-  });
+  // Buffered writer — accumulates small writes and flushes at 64KB to
+  // minimize syscalls. This is dramatically faster than createWriteStream
+  // for the many-small-writes pattern (2 writes per source line).
+  const WRITE_BUF_SIZE = 65536;
+  const writeBuf = Buffer.allocUnsafe(WRITE_BUF_SIZE);
+  let writeBufPos = 0;
 
-  // Await backpressure drain to prevent unbounded buffering in the writable
-  // stream's internal buffer, which would defeat the memory-efficiency goal.
-  // Checks `writableNeedDrain` first — if the stream already drained (or
-  // never needed to), awaiting the drain event would hang forever.
-  async function drain(): Promise<void> {
-    if (writeError) throw writeError;
-    if (!outStream.writableNeedDrain) return;
-    await new Promise<void>((res, rej) => {
-      const onDrain = () => {
-        outStream.removeListener("error", onError);
-        res();
-      };
-      const onError = (err: Error) => {
-        outStream.removeListener("drain", onDrain);
-        rej(err);
-      };
-      outStream.once("drain", onDrain);
-      outStream.once("error", onError);
-    });
+  async function flushWriteBuf(): Promise<void> {
+    if (writeBufPos > 0) {
+      await fd.write(writeBuf, 0, writeBufPos);
+      writeBufPos = 0;
+    }
+  }
+
+  async function writeBytes(buf: Buffer): Promise<void> {
+    // If the buffer is larger than remaining space, flush first
+    if (writeBufPos + buf.length > WRITE_BUF_SIZE) {
+      await flushWriteBuf();
+      // If it's larger than the entire buffer, write directly
+      if (buf.length > WRITE_BUF_SIZE) {
+        await fd.write(buf, 0, buf.length);
+        return;
+      }
+    }
+    buf.copy(writeBuf, writeBufPos);
+    writeBufPos += buf.length;
   }
 
   // ---- State ----
@@ -163,8 +161,8 @@ export async function streamingEdit(
 
   async function flushPending(): Promise<void> {
     if (pendingWrite !== null) {
-      if (!outStream.write(pendingWrite)) await drain();
-      if (!outStream.write(detectedEol)) await drain();
+      await writeBytes(pendingWrite);
+      await writeBytes(detectedEol);
       pendingWrite = null;
     }
   }
@@ -182,7 +180,11 @@ export async function streamingEdit(
   }
 
   async function cleanupTmp(): Promise<void> {
-    outStream.destroy(); // harmless no-op if already ended
+    try {
+      await fd.close();
+    } catch {
+      /* best-effort */
+    }
     try {
       await unlink(tmpPath);
     } catch {
@@ -382,10 +384,10 @@ export async function streamingEdit(
   // EOL based on whether the original file had a trailing newline.
   try {
     if (pendingWrite !== null) {
-      if (!outStream.write(pendingWrite)) await drain();
+      await writeBytes(pendingWrite);
       // If the last source line had a non-empty eolBytes, the file had a trailing newline
       if (lastEolBytes.length > 0) {
-        if (!outStream.write(detectedEol)) await drain();
+        await writeBytes(detectedEol);
       }
     }
   } catch (err) {
@@ -393,10 +395,11 @@ export async function streamingEdit(
     throw err;
   }
 
-  // Finish writing — `finished()` resolves on 'finish', rejects on 'error'.
-  outStream.end();
+  // Flush remaining buffered bytes and close the file descriptor.
   try {
-    await finished(outStream);
+    await flushWriteBuf();
+    await flushWriteBuf();
+    await fd.close();
   } catch (err) {
     await cleanupTmp();
     throw err;
