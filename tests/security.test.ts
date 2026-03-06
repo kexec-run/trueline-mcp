@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { parseToolPattern, fileGlobToRegex, readToolDenyPatterns, evaluateFilePath } from "../src/security.ts";
+import { parseToolPattern, fileGlobToRegex, readToolDenyPatterns, evaluateFilePath } from "../src/security.js";
 
 describe("parseToolPattern", () => {
   test("parses Read(.env)", () => {

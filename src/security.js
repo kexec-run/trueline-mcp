@@ -8,11 +8,21 @@ import { resolve } from "node:path";
 
 // Settings cache: keyed by file path, stores the last-seen mtime and parsed
 // globs. Avoids re-reading and re-parsing settings.json on every tool call.
-const settingsCache = new Map<string, { mtime: number; globs: string[] | null }>();
+/** @type {Map<string, { mtime: number; globs: string[] | null }>} */
+const settingsCache = new Map();
 
 // Regex cache: keyed by "glob:caseInsensitive", avoids re-compiling the same
 // pattern on every evaluateFilePath call.
-const regexCache = new Map<string, RegExp>();
+/** @type {Map<string, RegExp>} */
+const regexCache = new Map();
+
+/**
+ * Clear internal caches. Exported for testing only.
+ */
+export function clearCaches() {
+  settingsCache.clear();
+  regexCache.clear();
+}
 
 // ==============================================================================
 // Pattern Parsing
@@ -21,8 +31,10 @@ const regexCache = new Map<string, RegExp>();
 /**
  * Parse any tool permission pattern like "ToolName(glob)".
  * Returns { tool, glob } or null if not a valid pattern.
+ * @param {string} pattern
+ * @returns {{ tool: string; glob: string } | null}
  */
-export function parseToolPattern(pattern: string): { tool: string; glob: string } | null {
+export function parseToolPattern(pattern) {
   // .+ is greedy: for "Read(some(path))" it captures "some(path)"
   // because $ forces the final \) to match only the last paren.
   const match = pattern.match(/^(\w+)\((.+)\)$/);
@@ -40,8 +52,12 @@ export function parseToolPattern(pattern: string): { tool: string; glob: string 
  * - `*` matches anything except path separators
  * - `?` matches a single non-separator character
  * - Paths are matched with forward slashes (callers normalize first)
+ *
+ * @param {string} glob
+ * @param {boolean} [caseInsensitive=false]
+ * @returns {RegExp}
  */
-export function fileGlobToRegex(glob: string, caseInsensitive: boolean = false): RegExp {
+export function fileGlobToRegex(glob, caseInsensitive = false) {
   const cacheKey = `${glob}:${caseInsensitive}`;
   const cached = regexCache.get(cacheKey);
   if (cached) return cached;
@@ -88,41 +104,48 @@ export function fileGlobToRegex(glob: string, caseInsensitive: boolean = false):
  *   1. .claude/settings.local.json  (project-local)
  *   2. .claude/settings.json        (project-shared)
  *   3. ~/.claude/settings.json      (global)
+ *
+ * @param {string} toolName
+ * @param {string} [projectDir]
+ * @param {string} [globalSettingsPath]
+ * @returns {Promise<string[][]>}
  */
-export async function readToolDenyPatterns(
-  toolName: string,
-  projectDir?: string,
-  globalSettingsPath?: string,
-): Promise<string[][]> {
-  const extractGlobs = async (path: string): Promise<string[] | null> => {
+export async function readToolDenyPatterns(toolName, projectDir, globalSettingsPath) {
+  /** @param {string} path @returns {Promise<string[] | null>} */
+  const extractGlobs = async (path) => {
+    const cacheKey = `${path}:${toolName}`;
     // Check mtime — if unchanged since last call, return cached result.
-    let mtime: number;
+    /** @type {number} */
+    let mtime;
     try {
       mtime = (await stat(path)).mtimeMs;
     } catch {
       return null;
     }
 
-    const cached = settingsCache.get(path);
+    const cached = settingsCache.get(cacheKey);
     if (cached && cached.mtime === mtime) return cached.globs;
 
     // Read and parse in one step — both failures mean "no usable data".
-    let parsed: unknown;
+    /** @type {unknown} */
+    let parsed;
     try {
       parsed = JSON.parse(await readFile(path, "utf-8"));
     } catch {
-      settingsCache.set(path, { mtime, globs: null });
+      settingsCache.set(cacheKey, { mtime, globs: null });
       return null;
     }
 
     // Extract globs for the target tool from permissions.deny.
-    const obj = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : undefined;
+    const obj =
+      typeof parsed === "object" && parsed !== null ? /** @type {Record<string, unknown>} */ (parsed) : undefined;
     const perms =
       typeof obj?.permissions === "object" && obj.permissions !== null
-        ? (obj.permissions as Record<string, unknown>)
+        ? /** @type {Record<string, unknown>} */ (obj.permissions)
         : undefined;
     const denyArr = perms?.deny;
-    const globs: string[] = [];
+    /** @type {string[]} */
+    const globs = [];
     if (Array.isArray(denyArr)) {
       for (const entry of denyArr) {
         if (typeof entry !== "string") continue;
@@ -130,11 +153,12 @@ export async function readToolDenyPatterns(
         if (tp?.tool === toolName) globs.push(tp.glob);
       }
     }
-    settingsCache.set(path, { mtime, globs });
+    settingsCache.set(cacheKey, { mtime, globs });
     return globs;
   };
 
-  const paths: string[] = [];
+  /** @type {string[]} */
+  const paths = [];
   if (projectDir) {
     paths.push(resolve(projectDir, ".claude", "settings.local.json"));
     paths.push(resolve(projectDir, ".claude", "settings.json"));
@@ -143,7 +167,7 @@ export async function readToolDenyPatterns(
 
   // Read all settings files in parallel — they're independent.
   const allGlobs = await Promise.all(paths.map(extractGlobs));
-  return allGlobs.filter((g): g is string[] => g !== null);
+  return allGlobs.filter((g) => g !== null);
 }
 
 // ==============================================================================
@@ -155,19 +179,21 @@ export async function readToolDenyPatterns(
  *
  * Normalizes backslashes to forward slashes before matching so that
  * Windows paths work with Unix-style glob patterns.
+ *
+ * @param {string} filePath
+ * @param {string[][]} denyGlobs
+ * @param {boolean} [caseInsensitive]
+ * @returns {{ denied: boolean; matchedPattern?: string }}
  */
-export function evaluateFilePath(
-  filePath: string,
-  denyGlobs: string[][],
-  caseInsensitive: boolean = process.platform === "win32",
-): { denied: boolean; matchedPattern?: string } {
+export function evaluateFilePath(filePath, denyGlobs, caseInsensitive = process.platform === "win32") {
   const normalized = filePath.replace(/\\/g, "/");
   // For globs without path separators, also test just the basename so that
   // a simple pattern like ".env" matches "/any/path/.env" — the same
   // gitignore-style semantics Claude Code settings use.
   const basename = normalized.split("/").pop() ?? normalized;
 
-  const matches = (glob: string): boolean => {
+  /** @param {string} glob @returns {boolean} */
+  const matches = (glob) => {
     const re = fileGlobToRegex(glob, caseInsensitive);
     if (re.test(normalized)) return true;
 

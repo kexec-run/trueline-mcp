@@ -1,7 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { type ChecksumRef, parseChecksum, parseRange } from "../parse.ts";
-import { evaluateFilePath, readToolDenyPatterns } from "../security.ts";
+import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
 import { errorResult, type ToolResult } from "./types.ts";
 
 // ==============================================================================
