@@ -8,7 +8,6 @@
 
 const PLATFORM_ENV_VARS = {
   "gemini-cli": "GEMINI_PROJECT_DIR",
-  opencode: "OPENCODE_PROJECT_DIR",
   // claude-code and vscode-copilot both use CLAUDE_PROJECT_DIR, so we can't
   // distinguish them by env var alone. VS Code Copilot detection would need
   // an additional signal (e.g. VSCODE_PID). For now, both default to
@@ -26,7 +25,6 @@ export function detectPlatform() {
 
   // Check unique env vars first, then fall back to shared ones.
   if (process.env.GEMINI_PROJECT_DIR) return "gemini-cli";
-  if (process.env.OPENCODE_PROJECT_DIR) return "opencode";
   if (process.env.CLAUDE_PROJECT_DIR) return "claude-code";
 
   return "claude-code";

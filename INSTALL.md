@@ -186,7 +186,6 @@ The hook dispatcher auto-detects the platform from environment variables:
 | Env var                | Platform       |
 |------------------------|----------------|
 | `GEMINI_PROJECT_DIR`   | gemini-cli     |
-| `OPENCODE_PROJECT_DIR` | opencode       |
 | `CLAUDE_PROJECT_DIR`   | claude-code    |
 
 Override with `TRUELINE_PLATFORM=<platform>` if auto-detection doesn't work.
