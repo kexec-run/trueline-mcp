@@ -9,7 +9,6 @@
 //   trueline-hook gemini-cli beforetool    # Gemini CLI BeforeTool hook
 //   trueline-hook gemini-cli session-start # Gemini CLI session instructions
 //   trueline-hook vscode-copilot pretooluse
-//   trueline-hook claude-code pretooluse
 //
 // Reads hook event JSON from stdin (for tool-use hooks), writes platform-
 // formatted JSON to stdout.
@@ -21,13 +20,13 @@ const hooksDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "hooks")
 
 const USAGE = `Usage: trueline-hook <platform> <event>
 
-Platforms: claude-code, gemini-cli, vscode-copilot
+Platforms: gemini-cli, vscode-copilot
 Events:    pretooluse, beforetool, session-start
 
 Examples:
   trueline-hook gemini-cli beforetool
   trueline-hook vscode-copilot pretooluse
-  trueline-hook claude-code session-start`;
+  trueline-hook gemini-cli session-start`;
 
 // ==============================================================================
 // Argument Parsing
@@ -42,8 +41,8 @@ if (!platform || !event || process.argv.includes("--help") || process.argv.inclu
 }
 
 // Normalize event names across platforms.
-// Gemini calls it "beforetool", Claude Code calls it "pretooluse" — both map
-// to the same routing logic.
+// Gemini calls it "beforetool", VS Code Copilot calls it "pretooluse" — both
+// map to the same routing logic.
 const EVENT_ALIASES = {
   beforetool: "pretooluse",
   before_tool: "pretooluse",
