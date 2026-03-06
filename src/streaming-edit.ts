@@ -34,6 +34,7 @@ import {
   hashToLetters,
 } from "./hash.ts";
 import { EMPTY_BUF, LF_BUF, splitLines } from "./line-splitter.ts";
+import type { DiffCollector } from "./diff-collector.ts";
 import type { ChecksumRef } from "./parse.ts";
 
 // ==============================================================================
@@ -79,6 +80,7 @@ export async function streamingEdit(
   mtimeMs: number,
   dryRun = false,
   encoding: BufferEncoding = "utf-8",
+  collector?: DiffCollector,
 ): Promise<StreamingEditResult> {
   // ---- Sort ops ascending by startLine, insert_after after replace at same line ----
   const indexed = ops.map((op, i) => ({ op, i }));
@@ -206,9 +208,14 @@ export async function streamingEdit(
     const replacementBufs = op.content.map((s) => Buffer.from(s, encoding));
     if (buffersEqual(replacementBufs, origBytes)) {
       for (const buf of origBytes) await enqueueLine(buf);
+      if (collector) for (const buf of origBytes) collector.context(buf.toString(encoding));
     } else {
       contentChanged = true;
       for (const buf of replacementBufs) await enqueueLine(buf);
+      if (collector) {
+        for (const buf of origBytes) collector.delete(buf.toString(encoding));
+        for (const s of op.content) collector.insert(s);
+      }
     }
   }
 
@@ -225,6 +232,7 @@ export async function streamingEdit(
   if (line0Ops) {
     for (const op of line0Ops) {
       await writeContentLines(op.content);
+      if (collector) for (const line of op.content) collector.insert(line);
     }
     contentChanged = true;
     opsByStartLine.delete(0);
@@ -287,6 +295,7 @@ export async function streamingEdit(
               if (iaOp.insertAfter) {
                 contentChanged = true;
                 await writeContentLines(iaOp.content);
+                if (collector) for (const line of iaOp.content) collector.insert(line);
               }
             }
           }
@@ -323,6 +332,7 @@ export async function streamingEdit(
             for (const iaOp of insertOps) {
               contentChanged = true;
               await writeContentLines(iaOp.content);
+              if (collector) for (const line of iaOp.content) collector.insert(line);
             }
           } else {
             // Multi-line replace: enter active replace mode
@@ -344,15 +354,18 @@ export async function streamingEdit(
           }
 
           await enqueueLine(lineBytes);
+          if (collector) collector.context(lineBytes.toString(encoding));
 
           for (const iaOp of insertOps) {
             contentChanged = true;
             await writeContentLines(iaOp.content);
+            if (collector) for (const line of iaOp.content) collector.insert(line);
           }
         }
       } else {
         // No ops at this line — write raw bytes unchanged
         await enqueueLine(lineBytes);
+        if (collector) collector.context(lineBytes.toString(encoding));
       }
     }
   } catch (err: unknown) {

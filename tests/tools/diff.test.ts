@@ -137,7 +137,7 @@ describe("handleDiff", () => {
     expect(text).not.toMatch(/^\+(?![+-])/m); // no added lines (header lines start with +++)
   });
 
-  test("identical content produces only context lines", async () => {
+  test("identical content produces no-changes marker", async () => {
     const lines = ["line 1", "line 2", "line 3"];
     const cs = rangeChecksum(lines, 1, 3);
     const h2 = lineHash("line 2");
@@ -156,11 +156,7 @@ describe("handleDiff", () => {
 
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    // No + or - lines for content (only diff headers)
-    const contentLines = text
-      .split("\n")
-      .filter((l) => !l.startsWith("---") && !l.startsWith("+++") && !l.startsWith("@@") && !l.startsWith("==="));
-    expect(contentLines.every((l) => l.startsWith(" ") || l === "")).toBe(true);
+    expect(text).toBe("(no changes)");
   });
 
   test("single-line swap does not loop — was the infinite-loop case", async () => {

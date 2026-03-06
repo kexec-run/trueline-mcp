@@ -1,6 +1,6 @@
-import { readFile, unlink } from "node:fs/promises";
+import { unlink } from "node:fs/promises";
 import { relative } from "node:path";
-import { createTwoFilesPatch } from "diff";
+import { DiffCollector } from "../diff-collector.ts";
 import { streamingEdit } from "../streaming-edit.ts";
 import { type EditInput, validateEdits, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
@@ -35,32 +35,31 @@ export async function handleDiff(params: DiffParams): Promise<ToolResult> {
   const built = validateEdits(edits);
   if (!built.ok) return built.error;
 
-  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, true, enc);
+  const collector = new DiffCollector();
+  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, true, enc, collector);
 
   if (!result.ok) {
     return errorResult(result.error);
   }
 
-  if (!result.tmpPath) {
+  if (!result.changed) {
     return textResult("(no changes)");
   }
-  const tmpPath = result.tmpPath;
 
   // Use the resolved path relative to the project root so diff headers
   // show a meaningful path rather than just the basename.
   const relPath = file_path.startsWith("/") ? relative(projectDir ?? process.cwd(), resolvedPath) : file_path;
 
-  try {
-    const [oldStr, newStr] = await Promise.all([readFile(resolvedPath, enc), readFile(tmpPath, enc)]);
+  const diff = collector.format(`a/${relPath}`, `b/${relPath}`);
 
-    const diff = createTwoFilesPatch(`a/${relPath}`, `b/${relPath}`, oldStr, newStr);
-
-    return textResult(diff);
-  } finally {
+  // Clean up the temp file from the dry-run
+  if (result.tmpPath) {
     try {
-      await unlink(tmpPath);
+      await unlink(result.tmpPath);
     } catch {
       /* best-effort */
     }
   }
+
+  return textResult(diff);
 }
