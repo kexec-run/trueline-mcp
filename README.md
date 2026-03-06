@@ -2,15 +2,21 @@
 
 [![CI](https://github.com/rjkaes/trueline-mcp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rjkaes/trueline-mcp/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE) [![GitHub stars](https://img.shields.io/github/stars/rjkaes/trueline-mcp)](https://github.com/rjkaes/trueline-mcp) [![Last commit](https://img.shields.io/github/last-commit/rjkaes/trueline-mcp)](https://github.com/rjkaes/trueline-mcp/commits/main) [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
-A [Claude Code](https://code.claude.com) MCP plugin that cuts context
-usage and catches editing mistakes.
+A [Model Context Protocol](https://modelcontextprotocol.io/) plugin that cuts
+context usage and catches editing mistakes. Works with Claude Code, Gemini CLI,
+VS Code Copilot, OpenCode, and Codex CLI.
 
 ## Installation
+
+**Claude Code** (recommended — hooks are automatic):
 
 ```
 /plugin marketplace add rjkaes/trueline-mcp
 /plugin install trueline-mcp@trueline-mcp
 ```
+
+**Other platforms** (Gemini CLI, VS Code Copilot, OpenCode, Codex CLI):
+See [INSTALL.md](INSTALL.md) for platform-specific setup instructions.
 
 ## The problem
 
@@ -159,13 +165,16 @@ trueline_outline (navigate)
 
 A `SessionStart` hook injects instructions directing the agent to use
 trueline tools. A `PreToolUse` hook blocks the built-in `Edit` tool and
-redirects to the trueline workflow.
+redirects to the trueline workflow. On other platforms, equivalent hooks
+are available via the `trueline-hook` CLI dispatcher — see
+[INSTALL.md](INSTALL.md).
 
 ## Path access
 
 By default, trueline tools can access files inside the project directory
-(`CLAUDE_PROJECT_DIR`) and `~/.claude/`. To allow additional directories,
-set `TRUELINE_ALLOWED_DIRS` to a colon-separated list of paths.
+and `~/.claude/`. To allow additional directories, set
+`TRUELINE_ALLOWED_DIRS` to a colon-separated list of paths
+(semicolon-separated on Windows).
 
 ## Development
 

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "trueline": {
+      "command": "npx",
+      "args": ["-y", "trueline-mcp"]
+    }
+  }
+}

@@ -1,7 +1,7 @@
 {
-  "name": "trueline",
+  "name": "trueline-mcp",
   "version": "1.2.0",
-  "description": "Truth-verified file editing for Claude Code agents",
+  "description": "Truth-verified file editing for AI coding agents via MCP",
   "author": {
     "name": "rjk",
     "url": "https://github.com/rjkaes"

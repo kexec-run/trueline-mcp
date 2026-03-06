@@ -1,8 +1,8 @@
 {
-  "name": "trueline",
+  "name": "trueline-mcp",
   "version": "1.2.0",
   "type": "module",
-  "description": "Truth-verified file editing for Claude Code agents",
+  "description": "Truth-verified file editing for AI coding agents via MCP",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -12,9 +12,34 @@
   "bugs": {
     "url": "https://github.com/rjkaes/trueline-mcp/issues"
   },
+  "keywords": [
+    "mcp",
+    "trueline",
+    "editing",
+    "verification",
+    "claude-code",
+    "gemini-cli",
+    "copilot"
+  ],
+  "bin": {
+    "trueline-mcp": "./bin/trueline-mcp.js",
+    "trueline-hook": "./bin/trueline-hook.js"
+  },
+  "files": [
+    "dist/",
+    "bin/",
+    "scripts/resolve-binary.cjs",
+    "hooks/",
+    "configs/",
+    "src/security.js",
+    "README.md",
+    "INSTALL.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "bun run src/server.ts",
     "build": "bun build src/server.ts --target=node --outfile dist/server.js",
+    "prepublishOnly": "bun run build",
     "typecheck": "bun x tsc --noEmit",
     "test": "bun test",
     "lint": "bunx biome ci .",
