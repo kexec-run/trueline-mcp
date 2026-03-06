@@ -81,15 +81,18 @@ server.registerTool(
     description: "Apply hash-verified edits to a file. Each edit carries its own checksum.",
     inputSchema: z.object({
       file_path: z.string(),
-      edits: z
-        .array(
-          z.object({
-            checksum: z.string().describe("Checksum from trueline_read for the covering range"),
-            range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
-            content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
-          }),
-        )
-        .min(1),
+      edits: z.preprocess(
+        (val) => (typeof val === "string" ? JSON.parse(val) : val),
+        z
+          .array(
+            z.object({
+              checksum: z.string().describe("Checksum from trueline_read for the covering range"),
+              range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
+              content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
+            }),
+          )
+          .min(1),
+      ),
       encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
     }),
   },
@@ -104,15 +107,18 @@ server.registerTool(
     description: "Preview edits as a unified diff without writing to disk. Each edit carries its own checksum.",
     inputSchema: z.object({
       file_path: z.string(),
-      edits: z
-        .array(
-          z.object({
-            checksum: z.string().describe("Checksum from trueline_read for the covering range"),
-            range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
-            content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
-          }),
-        )
-        .min(1),
+      edits: z.preprocess(
+        (val) => (typeof val === "string" ? JSON.parse(val) : val),
+        z
+          .array(
+            z.object({
+              checksum: z.string().describe("Checksum from trueline_read for the covering range"),
+              range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
+              content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
+            }),
+          )
+          .min(1),
+      ),
       encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
     }),
   },
