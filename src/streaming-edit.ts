@@ -169,11 +169,10 @@ export async function streamingEdit(
     }
   }
 
-  async function enqueueLine(buf: Buffer): Promise<void> {
+  async function enqueueLine(buf: Buffer, precomputedHash?: number): Promise<void> {
     await flushPending();
     pendingWrite = buf;
-    // Hash the output line for full-file checksum
-    const lineH = fnv1aHashBytes(buf, 0, buf.length);
+    const lineH = precomputedHash ?? fnv1aHashBytes(buf, 0, buf.length);
     outputChecksumAcc = foldHash(outputChecksumAcc, lineH);
     outputLineCount++;
   }
@@ -353,7 +352,7 @@ export async function streamingEdit(
             }
           }
 
-          await enqueueLine(lineBytes);
+          await enqueueLine(lineBytes, lineH);
           if (collector) collector.context(lineBytes.toString(encoding));
 
           for (const iaOp of insertOps) {
@@ -364,7 +363,7 @@ export async function streamingEdit(
         }
       } else {
         // No ops at this line — write raw bytes unchanged
-        await enqueueLine(lineBytes);
+        await enqueueLine(lineBytes, lineH);
         if (collector) collector.context(lineBytes.toString(encoding));
       }
     }
