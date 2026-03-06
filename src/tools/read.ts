@@ -3,9 +3,11 @@
 //
 // Streams the file line-by-line via `splitLines` — the file is never loaded
 // into memory as a whole.  Supports reading multiple disjoint ranges in a
-// single call, each producing its own checksum.  Each line is decoded to a JS
-// string (required for the trueline output format), hashed with `fnv1aHash`,
-// and formatted as `lineNumber:hash|content`.
+// single call, each producing its own checksum.
+//
+// Output is assembled as raw byte buffers (line prefixes are ASCII, line
+// content stays as the original bytes) and decoded to a string once at the
+// end.  This avoids a per-line `Buffer.toString()` allocation.
 // ==============================================================================
 
 import { splitLines } from "../line-splitter.ts";
@@ -67,7 +69,9 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     return errorResult((err as Error).message);
   }
 
-  const outputParts: string[] = [];
+  const LF = Buffer.from("\n");
+  const outputChunks: Buffer[] = [];
+  let outputLen = 0;
   let rangeIdx = 0;
   let currentRange = ranges[0];
   let rangeChecksumHash = FNV_OFFSET_BASIS;
@@ -89,8 +93,10 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
       // Past current range — close it, advance
       if (lineNumber > currentRange.end) {
-        outputParts.push("");
-        outputParts.push(`checksum: ${formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash)}`);
+        const checksumLine = `\nchecksum: ${formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash)}\n`;
+        const cb = Buffer.from(checksumLine);
+        outputChunks.push(cb);
+        outputLen += cb.length;
 
         rangeIdx++;
         rangeChecksumHash = FNV_OFFSET_BASIS;
@@ -106,9 +112,13 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       if (rangeFirstLine === 0) rangeFirstLine = lineNumber;
       rangeLastLine = lineNumber;
       const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
-      const line = lineBytes.toString(enc);
       rangeChecksumHash = foldHash(rangeChecksumHash, h);
-      outputParts.push(`${lineNumber}:${hashToLetters(h)}|${line}`);
+
+      // Build line as raw bytes: "lineNumber:hash|" prefix (ASCII) + raw line bytes + LF.
+      // Avoids per-line Buffer.toString() — single decode at the end.
+      const prefix = Buffer.from(`${lineNumber}:${hashToLetters(h)}|`);
+      outputChunks.push(prefix, lineBytes, LF);
+      outputLen += prefix.length + lineBytes.length + 1;
     }
   } catch (err: unknown) {
     if (err instanceof Error && err.message.includes("binary")) {
@@ -129,9 +139,11 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   // Emit checksum for the last range
   if (rangeFirstLine > 0) {
-    outputParts.push("");
-    outputParts.push(`checksum: ${formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash)}`);
+    const checksumLine = `\nchecksum: ${formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash)}`;
+    const cb = Buffer.from(checksumLine);
+    outputChunks.push(cb);
+    outputLen += cb.length;
   }
 
-  return textResult(outputParts.join("\n"));
+  return textResult(Buffer.concat(outputChunks, outputLen).toString(enc));
 }

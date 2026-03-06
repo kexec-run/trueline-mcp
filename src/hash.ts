@@ -90,11 +90,19 @@ export function formatChecksum(startLine: number, endLine: number, hash: number)
 }
 
 /**
+ * Pre-computed lookup table of all 676 two-letter hash tags.
+ * Avoids per-call `String.fromCharCode` + concatenation in the hot loop.
+ */
+const LETTER_TABLE: string[] = /* @__PURE__ */ (() => {
+  const t = new Array<string>(676);
+  for (let i = 0; i < 26; i++) for (let j = 0; j < 26; j++) t[i * 26 + j] = String.fromCharCode(97 + i, 97 + j);
+  return t;
+})();
+
+/**
  * Map an FNV-1a hash to a two-lowercase-letter tag (676 possible values).
  * Used in the `lineNumber:ab|content` format returned by `trueline_read`.
  */
 export function hashToLetters(h: number): string {
-  const c1 = String.fromCharCode(97 + (h % 26));
-  const c2 = String.fromCharCode(97 + ((h >>> 8) % 26));
-  return c1 + c2;
+  return LETTER_TABLE[(h % 26) * 26 + ((h >>> 8) % 26)];
 }
