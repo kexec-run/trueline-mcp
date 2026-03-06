@@ -2,11 +2,8 @@
 
 [![CI](https://github.com/rjkaes/trueline-mcp/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/rjkaes/trueline-mcp/actions/workflows/ci.yml) [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE) [![GitHub stars](https://img.shields.io/github/stars/rjkaes/trueline-mcp)](https://github.com/rjkaes/trueline-mcp) [![Last commit](https://img.shields.io/github/last-commit/rjkaes/trueline-mcp)](https://github.com/rjkaes/trueline-mcp/commits/main) [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
-A [Claude Code](https://code.claude.com) MCP plugin for truth-verified file editing.
-
-Each line is tagged with a short hash. Before writing, the server verifies that
-the lines being replaced still match the hashes the agent observed — catching
-stale edits caused by concurrent changes or model hallucination.
+A [Claude Code](https://code.claude.com) MCP plugin that cuts context
+usage and catches editing mistakes.
 
 ## Installation
 
@@ -15,88 +12,112 @@ stale edits caused by concurrent changes or model hallucination.
 /plugin install trueline-mcp@trueline-mcp
 ```
 
-## Why Trueline?
+## The problem
 
-Trueline saves tokens on every edit — and catches mistakes the built-in
-tools can't.
+AI agents waste tokens in two ways:
 
-### Fewer output tokens
+1. **Reading too much.** To find a function in a 500-line file, the agent
+   reads all 500 lines — most of which it doesn't need.
 
-Claude Code's built-in `Edit` tool uses string matching: the model must
-echo back the exact text being replaced (`old_string`) plus the
-replacement (`new_string`). The old text is pure overhead — it's already
-in the file.
+2. **Echoing on edit.** The built-in `Edit` tool requires the agent to
+   output the old text being replaced (`old_string`) plus the new text.
+   The old text is pure overhead.
+
+Both problems compound. A typical editing session reads dozens of files
+and makes multiple edits, burning through context on redundant content.
+
+And when things go wrong — stale reads, hallucinated anchors, ambiguous
+matches — the agent silently corrupts your code.
+
+## How trueline fixes this
+
+trueline replaces Claude Code's built-in `Read` and `Edit` with four
+tools that are smaller, faster, and verified.
+
+### 95% fewer input tokens with `trueline_outline`
+
+Instead of reading an entire file to understand its structure,
+`trueline_outline` returns a compact AST outline — just the functions,
+classes, types, and declarations with their line ranges:
+
+```
+1-10: (10 imports)
+12-12: const VERSION = pkg.version;
+14-17: const server = new McpServer({
+25-45: async function resolveAllowedDirs(): Promise<string[]> {
+49-69: server.registerTool(
+71-92: server.registerTool(
+
+(12 symbols, 139 source lines)
+```
+
+12 lines instead of 139. The agent sees the full structure, picks the
+ranges it needs, and reads only those — skipping hundreds of irrelevant
+lines.
+
+| File size   | Full read | Outline | Savings |
+|-------------|-----------|---------|---------|
+| 140 lines   | 140 tokens | 12 tokens | 91% |
+| 245 lines   | 245 tokens | 14 tokens | 94% |
+| 504 lines   | 504 tokens | 4 tokens  | 99% |
+
+Every line range in the outline maps directly to a `trueline_read` call.
+
+### 44% fewer output tokens with `trueline_edit`
+
+The built-in `Edit` makes the model echo back the text being replaced:
 
 ```json
-// Built-in Edit — model must output the old text to locate the edit
+// Built-in Edit — model must output the old text
 {
-  "file_path": "src/server.ts",
-  "old_string": "export function handleRequest(req: Request) {\n  const body = await req.json();\n  validate(body);\n  return process(body);\n}",
-  "new_string": "export function handleRequest(req: Request) {\n  const body = await req.json();\n  const parsed = schema.parse(body);\n  return process(parsed);\n}"
+  "old_string": "export function handleRequest(req: Request) {\n  ...\n}",
+  "new_string": "export function handleRequest(req: Request) {\n  ...(new)...\n}"
 }
 ```
 
-trueline_edit replaces the old text with a compact line-range reference:
+`trueline_edit` replaces old text with a compact line-range reference:
 
 ```json
 // trueline_edit — just the range and the new content
 {
-  "file_path": "src/server.ts",
   "edits": [{
     "checksum": "1-50:a3b1c2d4",
     "range": "12:kf..16:qz",
-    "content": "export function handleRequest(req: Request) {\n  const body = await req.json();\n  const parsed = schema.parse(body);\n  return process(parsed);\n}"
+    "content": "export function handleRequest(req: Request) {\n  ...(new)...\n}"
   }]
 }
 ```
 
-The model never echoes the old text. For a typical 15-line edit, that's
-**~200 fewer output tokens per edit** — the most expensive token class.
+The model never echoes old text. For a typical 15-line edit:
 
-### No uniqueness problem
+| | Built-in Edit | trueline_edit |
+|---|---|---|
+| Old text echoed (output tokens) | ~225 | 0 |
+| New text (output tokens) | ~225 | ~225 |
+| Range/checksum overhead | 0 | ~13 |
+| **Total output tokens** | **~470** | **~263** |
+| **Savings** | | **44%** |
 
-The built-in `Edit` fails if `old_string` appears more than once in the
-file, forcing the model to include extra context lines until the match is
-unique. trueline_edit addresses lines directly — no ambiguity, no wasted
-context.
+Output tokens are the most expensive token class. Cutting them by 44%
+on every edit adds up fast.
 
-### Batch edits in one call
+### Targeted reads save more input tokens
 
-The built-in `Edit` handles one replacement per call. trueline_edit
-accepts an array of edits applied atomically in a single call, cutting
-tool-call overhead for multi-site changes.
+`trueline_read` supports multiple disjoint ranges in a single call.
+Instead of re-reading a 2000-line file to edit two distant sections,
+the agent reads only the ranges it needs:
+
+```
+trueline_read(file_path: "big-file.ts", ranges: [{start: 45, end: 60}, {start: 200, end: 215}])
+```
+
+30 lines instead of 2000 — with separate checksums for each range.
 
 ### Hash verification catches mistakes
 
-Per-line hashes and range checksums verify that the file hasn't changed
-since the model read it. Stale edits from concurrent changes or model
-hallucination are rejected before they corrupt your code.
-
-### Cost comparison
-
-| Scenario: replace 15 lines in a 200-line file | Built-in Edit | trueline_edit |
-|------------------------------------------------|---------------|---------------|
-| Old text echoed back (output tokens)           | ~225          | 0             |
-| New text (output tokens)                       | ~225          | ~225          |
-| Range/checksum overhead                        | 0             | ~13           |
-| Boilerplate                                    | ~20           | ~25           |
-| **Total output tokens**                        | **~470**      | **~263**      |
-| **Savings**                                    |               | **44%**       |
-
-If `old_string` isn't unique and extra context is needed, built-in Edit
-cost rises further — trueline stays constant.
-
-Multi-range reads also save **input tokens**: instead of re-reading an
-entire file to edit two distant sections, the agent reads only the
-ranges it needs — skipping hundreds of irrelevant lines.
-
-## How it works
-
-`trueline_read` returns file content in trueline format. It supports reading
-multiple disjoint ranges in a single call, each producing its own checksum.
-Each line is prefixed with its line number and a 2-letter hash derived from
-FNV-1a 32-bit. A range checksum (FNV-1a 32-bit, 8 hex chars) covers each
-range of lines read:
+Every line from `trueline_read` carries a content hash. Every edit must
+present those hashes back, proving the agent is working against the
+file's actual content:
 
 ```
 1:bx|import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -106,68 +127,60 @@ range of lines read:
 checksum: 1-3:8a64a3f7
 ```
 
-`trueline_edit` takes a range specifier (`startLine:startHash..endLine:endHash`,
-e.g. `"1:bx..3:ew"`) and a per-edit checksum from the read. Both are verified
-before the write — if either has changed since the read, the edit is rejected.
+If anything changed since the read — concurrent edits, model
+hallucination, stale context — the edit is rejected before any bytes
+hit disk. Three layers of protection:
 
-Here is what a `trueline_edit` call looks like in practice:
+| Layer | What it catches |
+|-------|----------------|
+| Per-line hash | Changed content at edit boundaries |
+| Range checksum | Any change within the read window |
+| mtime guard | Concurrent modification by another process |
 
-```
-trueline_edit(
-  file_path: "README.md",
-  edits: [{
-    checksum: "1-112:a509e33a",
-    range: "+56:dd",
-    content: "\\nthis is awesome\\n"
-  }]
-)
-```
+No more silent corruption. No more ambiguous string matches.
 
-```
-Edit applied. (10ms)
+### Batch edits in one call
 
-inserted 3 lines after line 56
-checksum: 1-115:52d30156
-```
+The built-in `Edit` handles one replacement per call. `trueline_edit`
+accepts an array of edits applied atomically, cutting tool-call
+overhead for multi-site changes.
 
-`trueline_diff` previews the proposed changes as a unified diff without writing
-to disk.
-
-### Workflow
+## Workflow
 
 ```
-trueline_read → trueline_diff (optional) → trueline_edit
+trueline_outline (navigate) → trueline_read (targeted ranges) → trueline_diff (preview) → trueline_edit (apply)
 ```
 
-### Hooks
-
-A `SessionStart` hook injects instructions into every session directing the
-agent to use the trueline tools instead of the built-in `Read`/`Edit` tools.
-A `PreToolUse` hook blocks the built-in `Edit` tool outright and redirects
-to the trueline workflow.
-
-### Path access
-
-By default, trueline tools can access files inside the project directory
-(`CLAUDE_PROJECT_DIR`) and `~/.claude/` (where Claude Code stores plans,
-memory, and settings). To allow additional directories, set the
-`TRUELINE_ALLOWED_DIRS` environment variable to a colon-separated list of
-paths.
+A `SessionStart` hook injects instructions directing the agent to use
+trueline tools. A `PreToolUse` hook blocks the built-in `Edit` tool and
+redirects to the trueline workflow.
 
 ## Tools
 
-### `trueline_read`
+### `trueline_outline`
 
-Read a file and return its content with per-line hashes and a range checksum.
+Get a compact structural outline of a source file using tree-sitter.
 
 | Parameter    | Type    | Description                                             |
 |--------------|---------|-------------------------------------------------------  |
 | `file_path`  | string  | Path to the file                                        |
-| `ranges`     | array   | Optional array of `{start, end}` ranges to read (default: whole file) |
+
+Supports 20+ languages: TypeScript, JavaScript, Python, Go, Rust, Java,
+C, C++, C#, Ruby, PHP, Kotlin, Swift, Scala, Elixir, Lua, Dart, Zig,
+Bash.
+
+### `trueline_read`
+
+Read a file with per-line hashes and a range checksum.
+
+| Parameter    | Type    | Description                                             |
+|--------------|---------|-------------------------------------------------------  |
+| `file_path`  | string  | Path to the file                                        |
+| `ranges`     | array   | Optional array of `{start, end}` ranges (default: whole file) |
 
 ### `trueline_edit`
 
-Apply one or more edits to a file with hash verification.
+Apply one or more hash-verified edits to a file.
 
 | Parameter  | Type   | Description                                              |
 |------------|--------|----------------------------------------------------------|
@@ -184,8 +197,14 @@ Each edit:
 
 ### `trueline_diff`
 
-Preview edits as a unified diff. Takes the same
+Preview edits as a unified diff without writing to disk. Takes the same
 parameters as `trueline_edit`.
+
+## Path access
+
+By default, trueline tools can access files inside the project directory
+(`CLAUDE_PROJECT_DIR`) and `~/.claude/`. To allow additional directories,
+set `TRUELINE_ALLOWED_DIRS` to a colon-separated list of paths.
 
 ## Development
 

@@ -1,0 +1,52 @@
+/**
+ * Tree-sitter parser management.
+ *
+ * Lazily initializes web-tree-sitter and caches loaded language grammars.
+ * WASM files are resolved from the tree-sitter-wasms package.
+ */
+import { createRequire } from "node:module";
+import { resolve, dirname } from "node:path";
+import Parser from "web-tree-sitter";
+
+const require = createRequire(import.meta.url);
+
+let initialized = false;
+// biome-ignore lint/suspicious/noExplicitAny: web-tree-sitter 0.24.x has no usable type exports
+const languageCache = new Map<string, any>();
+
+/** Ensure web-tree-sitter WASM runtime is initialized (idempotent). */
+export async function ensureInit(): Promise<void> {
+  if (initialized) return;
+  await Parser.init();
+  initialized = true;
+}
+
+/** Resolve the path to a grammar's .wasm file via require.resolve. */
+function grammarPath(grammar: string): string {
+  // require.resolve finds the package from wherever node_modules lives,
+  // whether running from src/ or dist/
+  const wasmsEntry = require.resolve("tree-sitter-wasms/package.json");
+  return resolve(dirname(wasmsEntry), "out", `tree-sitter-${grammar}.wasm`);
+}
+
+/** Load a language grammar (cached). */
+// biome-ignore lint/suspicious/noExplicitAny: web-tree-sitter 0.24.x has no usable type exports
+export async function loadLanguage(grammar: string): Promise<any> {
+  const cached = languageCache.get(grammar);
+  if (cached) return cached;
+
+  await ensureInit();
+  const lang = await Parser.Language.load(grammarPath(grammar));
+  languageCache.set(grammar, lang);
+  return lang;
+}
+
+/** Create a parser configured for a given grammar. */
+// biome-ignore lint/suspicious/noExplicitAny: web-tree-sitter 0.24.x has no usable type exports
+export async function createParser(grammar: string): Promise<any> {
+  await ensureInit();
+  const parser = new Parser();
+  const lang = await loadLanguage(grammar);
+  parser.setLanguage(lang);
+  return parser;
+}

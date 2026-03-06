@@ -8,11 +8,12 @@ describe("getInstructions", () => {
     expect(out).toContain("</trueline_mcp_instructions>");
   });
 
-  test("documents all three trueline tools", () => {
+  test("documents all four trueline tools", () => {
     const out = getInstructions();
     expect(out).toContain("trueline_read");
     expect(out).toContain("trueline_edit");
     expect(out).toContain("trueline_diff");
+    expect(out).toContain("trueline_outline");
   });
 
   test("includes a workflow element", () => {

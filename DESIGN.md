@@ -5,8 +5,8 @@ reads carries a short content hash, and every edit must present those
 hashes back — proving the agent is working against the file's actual
 content rather than a stale or hallucinated version.
 
-This document explains how the two core tools, `trueline_read` and
-`trueline_edit`, work together.
+This document explains how the core tools — `trueline_read`,
+`trueline_edit`, `trueline_diff`, and `trueline_outline` — work together.
 
 ## The problem
 
@@ -66,7 +66,6 @@ trueline_read({
   ranges: [{ start: 10, end: 25 }],  // optional, default: whole file
 })
 ```
-```
 
 The tool streams the file line-by-line — it never loads the entire
 file into memory. The pipeline:
@@ -110,7 +109,6 @@ trueline_edit({
     content: "  const x = 1;\n  const y = 2;",
   }]
 })
-```
 ```
 
 Each edit specifies:
@@ -235,9 +233,85 @@ writes nothing to disk. It runs the full verification pipeline, applies
 the edits in memory, and returns a unified diff. Useful for previewing
 changes before committing to them.
 
+## Outlining: `trueline_outline`
+
+`trueline_outline` returns a compact structural outline of a source file —
+functions, classes, interfaces, types, and other top-level declarations —
+without reading the full content. It uses
+[tree-sitter](https://tree-sitter.github.io/) via WebAssembly for
+language-aware parsing.
+
+### Why a separate tool?
+
+An LLM agent navigating an unfamiliar codebase typically reads entire files
+to understand their structure. For a 500-line file, that consumes ~500
+lines of context just to learn "there are 4 functions and 2 classes."
+`trueline_outline` returns the same structural information in 5-10 lines,
+achieving ~95% token reduction.
+
+The agent can then call `trueline_read` with specific line ranges to dive
+into the functions it actually needs.
+
+### Architecture
+
+The outline system has three layers:
+
+1. **Parser management** (`src/outline/parser.ts`) — lazily initializes
+   the `web-tree-sitter` WASM runtime, resolves grammar `.wasm` files
+   from the `tree-sitter-wasms` package via `require.resolve`, and caches
+   loaded languages.
+
+2. **Language configs** (`src/outline/languages.ts`) — per-language
+   configuration mapping file extensions to tree-sitter grammars and
+   defining which AST node types to extract. Each config specifies:
+   - `outline`: node types to include (e.g. `function_declaration`,
+     `class_declaration`)
+   - `skip`: node types to exclude (e.g. `import_statement`)
+   - `recurse`: container node types whose children should be inlined
+     at depth+1 (e.g. `class_body` to show class members)
+   - `topLevelOnly`: node types only included as direct children of the
+     root (e.g. `expression_statement` to capture `server.registerTool()`
+     calls but not nested `console.log()` inside try/catch)
+
+3. **Extraction** (`src/outline/extract.ts`) — walks the AST, applies
+   the language config, and produces `OutlineEntry` objects with line
+   ranges, depth, and the first line of source for each node.
+
+### Output format
+
+Every entry uses a `start-end` line range format that maps directly to
+`trueline_read` ranges. Skipped nodes (imports, etc.) are collapsed into
+a summary showing their line range:
+
+```
+1-10: (10 imports)
+12-12: const VERSION = pkg.version;
+14-17: const server = new McpServer({
+25-45: async function resolveAllowedDirs(): Promise<string[]> {
+1-9: class Greeter {
+  3-3: constructor(name: string) {
+  6-8: greet(): string {
+
+(8 symbols, 50 source lines)
+```
+
+Top-level declarations appear at depth 0; class/struct members appear
+indented at depth 1. The agent can pass any line range directly to
+`trueline_read(ranges: [{start: 25, end: 45}])` without transformation.
+
+### Supported languages
+
+20+ languages are supported via pre-built WASM grammars from the
+`tree-sitter-wasms` package: TypeScript, JavaScript (+ JSX/TSX),
+Python, Go, Rust, Java, C, C++, C#, Ruby, PHP, Kotlin, Swift, Scala,
+Elixir, Lua, Dart, Zig, and Bash.
+
+Adding a new language requires only a new entry in `languages.ts` — no
+new dependencies.
+
 ## Security model
 
-All three tools share a file-access layer that enforces deny patterns
+All four tools share a file-access layer that enforces deny patterns
 from a three-tier settings hierarchy:
 
 1. `.claude/settings.local.json` (project-local, gitignored)

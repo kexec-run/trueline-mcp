@@ -8,6 +8,7 @@ import pkg from "../package.json";
 import { handleDiff } from "./tools/diff.ts";
 import { handleEdit } from "./tools/edit.ts";
 import { handleRead } from "./tools/read.ts";
+import { handleOutline } from "./tools/outline.ts";
 
 const VERSION = pkg.version;
 
@@ -111,6 +112,21 @@ server.registerTool(
   },
   async (params) => {
     return handleDiff({ ...params, projectDir, allowedDirs });
+  },
+);
+
+server.registerTool(
+  "trueline_outline",
+  {
+    description:
+      "Get a compact structural outline of a source file (functions, classes, types, etc.) without reading the full content. " +
+      "Much smaller than trueline_read — use this first to understand file structure, then read specific ranges.",
+    inputSchema: z.object({
+      file_path: z.string(),
+    }),
+  },
+  async (params) => {
+    return handleOutline({ ...params, projectDir, allowedDirs });
   },
 );
 

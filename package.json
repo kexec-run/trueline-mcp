@@ -22,6 +22,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
+    "tree-sitter-wasms": "0.1.13",
+    "web-tree-sitter": "0.24.7",
     "zod": "^3.25.0"
   },
   "devDependencies": {
