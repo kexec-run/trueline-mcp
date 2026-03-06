@@ -185,6 +185,23 @@ fastest by a comfortable margin, followed by Deno, with Node.js coming in last.
 If you have the option, install [Bun](https://bun.sh) — you'll notice the
 difference on large files and batch edits.
 
+## Benchmarks
+
+Measured on Apple M4 Max (48 GB) with Bun 1.3.9. Edit times include a
+fresh range-read for checksum verification.
+
+| File size | Read (full) | Read (100 lines) | Edit (11-line replace) |
+|-----------|-------------|-------------------|------------------------|
+| 10 KB / 100 lines | 0.4 ms | 0.3 ms | 0.6 ms |
+| 100 KB / 1K lines | 1.3 ms | 0.5 ms | 1.9 ms |
+| 1 MB / 10K lines | 2.1 ms | 3.7 ms | 15.4 ms |
+| 5 MB / 50K lines | 2.1 ms | 17.8 ms | 75.5 ms |
+| 10 MB / 100K lines | 2.2 ms | 37.7 ms | 152 ms |
+
+Full reads cap at ~2 ms for files above 1 MB because the 2,000-line output
+limit triggers early truncation. Range reads and edits scale linearly with
+file size since they stream the entire file.
+
 ## Development
 
 Requires [Bun](https://bun.sh) ≥ 1.3.
