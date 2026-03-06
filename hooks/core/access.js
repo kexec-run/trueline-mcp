@@ -30,9 +30,13 @@ export async function createAccessChecker(projectDir) {
 
   // Build allowed dirs list (same logic as server.ts).
   const allowedBases = [realBase];
-  try {
-    allowedBases.push(await realpath(resolve(homedir(), ".claude")));
-  } catch {}
+
+  // ~/.claude/ — only relevant when running under Claude Code.
+  if (process.env.CLAUDE_PROJECT_DIR) {
+    try {
+      allowedBases.push(await realpath(resolve(homedir(), ".claude")));
+    } catch {}
+  }
 
   const extraDirs = process.env.TRUELINE_ALLOWED_DIRS;
   if (extraDirs) {

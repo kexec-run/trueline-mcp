@@ -173,9 +173,11 @@ npm i -g trueline-mcp
 
 ## Path access
 
-By default, trueline tools can access files inside the project directory and
-`~/.claude/`. To allow additional directories, set `TRUELINE_ALLOWED_DIRS` to
-a colon-separated list of paths (semicolon-separated on Windows).
+By default, trueline tools can access files inside the project directory.
+When running under Claude Code, `~/.claude/` is also allowed (it stores
+plans, memory, and settings). To allow additional directories on any
+platform, set `TRUELINE_ALLOWED_DIRS` to a colon-separated list of paths
+(semicolon-separated on Windows).
 
 ## Platform detection
 

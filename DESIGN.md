@@ -324,12 +324,12 @@ blocked before content is read.
 
 Additional protections:
 - **Path containment:** files must resolve (after symlink resolution)
-  to within one of the allowed base directories. By default the
-  allowed bases are the project directory (`CLAUDE_PROJECT_DIR` or
-  cwd) and `~/.claude/` (where Claude Code stores plans, memory,
-  and settings). Additional directories can be added via the
-  `TRUELINE_ALLOWED_DIRS` environment variable (colon-separated
-  paths).
+  to within one of the allowed base directories. The project directory
+  (`CLAUDE_PROJECT_DIR` or cwd) is always allowed. When running under
+  Claude Code, `~/.claude/` is also allowed (where it stores plans,
+  memory, and settings). Additional directories can be added on any
+  platform via the `TRUELINE_ALLOWED_DIRS` environment variable
+  (colon-separated on macOS/Linux, semicolon-separated on Windows).
 - **Binary files:** null bytes in content trigger rejection.
 - **Size limit:** files over 10 MB are rejected.
 - **Regular files only:** directories, devices, FIFOs, and sockets
