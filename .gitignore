@@ -8,3 +8,4 @@ dist/
 .claude/settings.local.json
 SESSION.md
 docs/plans/
+CLAUDE.md
