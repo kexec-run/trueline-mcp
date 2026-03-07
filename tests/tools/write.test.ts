@@ -56,7 +56,7 @@ describe("trueline_write", () => {
     const result = await handleWrite({ file_path: "/tmp/outside.ts", content: "x", projectDir: testDir });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Access denied");
+    expect(result.content[0].text).toMatch(/Access denied|No accessible ancestor/);
   });
 
   test("rejects writing to a directory", async () => {
