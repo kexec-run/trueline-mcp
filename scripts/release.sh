@@ -69,11 +69,9 @@ git add package.json .claude-plugin/plugin.json
 LEFTHOOK=0 git commit -m "chore: release v${new_version}"
 git tag "$tag"
 
-# Push
+# Push (lefthook pre-push hook auto-rebases onto remote main)
 echo ""
-echo "==> Rebasing onto remote main (in case CI committed dist/)..."
-git pull --rebase origin main
-
+echo "==> Pushing commit and tag..."
 echo ""
 echo "==> Pushing commit and tag..."
 git push
