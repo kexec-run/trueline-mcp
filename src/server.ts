@@ -73,6 +73,12 @@ server.registerTool(
         )
         .optional(),
       encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
+      hashes: z
+        .boolean()
+        .describe(
+          "Include per-line hashes in output. Defaults to true. Set to false for exploratory reads where you don't plan to edit — saves tokens. Checksums are always included.",
+        )
+        .optional(),
     }),
   },
   async (params) => {

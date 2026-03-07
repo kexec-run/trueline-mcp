@@ -194,4 +194,44 @@ describe("handleRead", () => {
     expect(text).not.toContain("truncated");
     expect(text).toMatch(/checksum: 100-199:[0-9a-f]{8}/);
   });
+
+  test("hashes=false omits per-line hashes", async () => {
+    const result = await handleRead({
+      file_path: testFile,
+      hashes: false,
+      projectDir: testDir,
+    });
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    const lines = text.split("\n").filter(Boolean);
+    // Format should be N|content (no hash)
+    expect(lines[0]).toMatch(/^1\|const a = 1;$/);
+    expect(lines[1]).toMatch(/^2\|const b = 2;$/);
+    expect(lines[2]).toMatch(/^3\|const c = 3;$/);
+    // Checksum should still be present
+    expect(text).toContain("checksum:");
+  });
+
+  test("hashes=false with ranges still has checksums", async () => {
+    const result = await handleRead({
+      file_path: testFile,
+      hashes: false,
+      ranges: [{ start: 1, end: 2 }],
+      projectDir: testDir,
+    });
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toMatch(/^1\|const a = 1;\n2\|const b = 2;\n/);
+    expect(text).toContain("checksum: 1-2:");
+  });
+
+  test("hashes defaults to true", async () => {
+    const result = await handleRead({
+      file_path: testFile,
+      projectDir: testDir,
+    });
+    const text = result.content[0].text;
+    // Default should include hashes
+    expect(text.split("\n")[0]).toMatch(/^1:[a-z]{2}\|/);
+  });
 });

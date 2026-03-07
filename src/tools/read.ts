@@ -26,6 +26,7 @@ import { errorResult, type ToolResult, textResult } from "./types.ts";
 interface ReadParams {
   file_path: string;
   encoding?: string;
+  hashes?: boolean;
   start_line?: number;
   end_line?: number;
   ranges?: Array<{ start?: number; end?: number }>;
@@ -35,6 +36,7 @@ interface ReadParams {
 
 export async function handleRead(params: ReadParams): Promise<ToolResult> {
   const { file_path, start_line, end_line, projectDir, allowedDirs } = params;
+  const includeHashes = params.hashes !== false;
 
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
@@ -116,7 +118,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       if (rangeFirstLine === 0) rangeFirstLine = lineNumber;
 
       const h = fnv1aHashBytes(lineBytes, 0, lineBytes.length);
-      const prefix = Buffer.from(`${lineNumber}:${hashToLetters(h)}|`);
+      const prefix = includeHashes ? Buffer.from(`${lineNumber}:${hashToLetters(h)}|`) : Buffer.from(`${lineNumber}|`);
       const lineLen = prefix.length + lineBytes.length + 1;
 
       // Check output limits before committing this line
