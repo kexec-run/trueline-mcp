@@ -11,8 +11,3 @@ pre-commit:
 
     - name: test
       run: bun test
-
-pre-push:
-  jobs:
-    - name: rebase
-      run: git pull --rebase origin main

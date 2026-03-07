@@ -78,7 +78,7 @@ git tag "$tag"
 # Push commit and tag
 echo ""
 echo "==> Pushing commit and tag..."
-LEFTHOOK=0 git push origin main
+git push origin main
 git push origin "$tag"
 
 echo ""
