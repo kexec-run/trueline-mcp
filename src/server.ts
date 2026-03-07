@@ -24,14 +24,14 @@ const rawProjectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
 const projectDir = await realpath(rawProjectDir).catch(() => rawProjectDir);
 
 // Build the list of additional allowed directories beyond projectDir.
-// ~/.claude/ is added when running under Claude Code (detected via
-// CLAUDE_PROJECT_DIR) — that's where it stores plans, memory, and settings.
+// ~/.claude/ is added when running under Claude Code (detected via the
+// CLAUDECODE env var) — that's where it stores plans, memory, and settings.
 // TRUELINE_ALLOWED_DIRS adds arbitrary extras on any platform.
 async function resolveAllowedDirs(): Promise<string[]> {
   const dirs: string[] = [];
 
   // ~/.claude/ — only relevant for Claude Code
-  if (process.env.CLAUDE_PROJECT_DIR) {
+  if (process.env.CLAUDECODE) {
     const claudeDir = join(homedir(), ".claude");
     await mkdir(claudeDir, { recursive: true }).catch(() => {});
     const realClaudeDir = await realpath(claudeDir).catch(() => null);
