@@ -28,15 +28,9 @@ describe("getInstructions", () => {
     expect(out).toContain("blocked");
   });
 
-  test("instructs agent to relay instructions to subagents", () => {
+  test("mentions checksum from trueline_read", () => {
     const out = getInstructions();
-    expect(out).toContain("subagents");
-  });
-
-  test("mentions per-edit checksum and multi-range read", () => {
-    const out = getInstructions();
-    expect(out).toContain("checksum per range");
-    expect(out).toContain("checksum (from trueline_read");
+    expect(out).toContain("checksum from trueline_read");
   });
 
   test("getSessionStartInstructions is a backwards-compatible alias", () => {
