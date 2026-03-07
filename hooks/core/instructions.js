@@ -62,15 +62,16 @@ export function getInstructions(platform = "claude-code") {
     <tool name="trueline_edit">Edit a file with hash verification. Replaces the built-in Edit tool, which is blocked. Each edit needs: checksum (from trueline_read for the covering range), range (startLine:hash..endLine:hash or +startLine:hash for insert-after), content (replacement lines as newline-separated string; empty string to delete). Pass all changes to the same file in the edits array.</tool>
     <tool name="trueline_diff">Preview edits as a unified diff without writing to disk.</tool>
     <tool name="trueline_outline">Get a compact structural outline of a source file (functions, classes, types, etc.) without reading full content. Often sufficient on its own for navigation and understanding. Use before trueline_read to identify the right line ranges when you do need to read.</tool>
-    <tool name="trueline_search">Search a file by regex. Returns matching lines with context, per-line hashes, and checksums — edit-ready. Use instead of outline+read when you know the pattern to look for.</tool>
+    <tool name="trueline_search">Search a file by regex. Returns matching lines with surrounding context, per-line hashes, and checksums — output is edit-ready (pass checksums directly to trueline_edit). Preferred over Grep for single-file searches because results include hashes for immediate editing. Preferred over outline+read when you know a pattern to search for.</tool>
   </tools>
-  <workflow>trueline_outline (navigate / understand) \u2192 trueline_read (targeted ranges, only if needed) \u2192 trueline_diff (optional) \u2192 trueline_edit</workflow>
-  <workflow>trueline_search (find pattern) → trueline_edit (immediate edit from search results)</workflow>
+  <workflow>trueline_outline (navigate / understand) → trueline_read (targeted ranges, only if needed) → trueline_diff (optional) → trueline_edit</workflow>
+  <workflow>trueline_search (find + read in one step) → trueline_edit (edit directly from search results, no re-read needed)</workflow>
   <rules>${editRule}
     <rule>${rules.readAdvice}</rule>${subagentRule}
     <rule>trueline_outline is often enough by itself for questions about file structure, purpose, or navigation. Only call trueline_read when you actually need the source code (e.g. to edit, debug, or understand implementation details).</rule>
     <rule>After using trueline_outline, if you do need to read, use its line numbers to read only the specific ranges you need \u2014 do NOT read the entire file.</rule>
     <rule>Only read a full file (no ranges) when you have not used trueline_outline and the file is short, or you genuinely need every line.</rule>
-  </rules>
+    <rule>When you need to find a pattern in a specific file (e.g. to locate code before editing, find usages within a file, or search for a string), use trueline_search instead of Grep or outline+read. trueline_search returns hashes and checksums so you can edit immediately without a separate trueline_read call.</rule>
+    <rule>When you need to find a pattern across many files, use Grep to identify the files, then use trueline_search on individual files you need to edit.</rule>
 </trueline_mcp_instructions>`;
 }
