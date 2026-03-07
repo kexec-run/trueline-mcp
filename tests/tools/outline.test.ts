@@ -285,4 +285,36 @@ describe("trueline_outline", () => {
     // Multi-line entries should use start-end format
     expect(text).toMatch(/^2-4: function foo\(\)/m);
   });
+
+  test("shows full multi-line function signature", async () => {
+    const file = writeTestFile(
+      "multiline-sig.ts",
+      [
+        "export async function createServer(",
+        "  name: string,",
+        "  port: number,",
+        "  options: ServerOptions,",
+        "): Promise<Server> {",
+        "  return new Server(name, port, options);",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const text = getText(result);
+    // Should show the full signature, not just the first line
+    expect(text).toContain("createServer(name: string, port: number, options: ServerOptions): Promise<Server>");
+  });
+
+  test("single-line signatures stay unchanged", async () => {
+    const file = writeTestFile(
+      "single-sig.ts",
+      ["function add(a: number, b: number): number {", "  return a + b;", "}", ""].join("\n"),
+    );
+
+    const result = await handleOutline({ file_path: file, projectDir: testDir });
+    const text = getText(result);
+    expect(text).toContain("function add(a: number, b: number): number {");
+  });
 });

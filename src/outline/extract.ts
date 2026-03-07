@@ -37,9 +37,42 @@ export async function extractOutline(source: string, config: LanguageConfig): Pr
   const lines = source.split("\n");
   const entries: OutlineEntry[] = [];
 
-  function firstLine(node: SyntaxNode): string {
-    const line = lines[node.startPosition.row]?.trimEnd() ?? "";
-    return line.length > 150 ? `${line.slice(0, 147)}...` : line;
+  /**
+   * Extract a compact signature for the node.
+   *
+   * For single-line declarations, returns the trimmed first line (current behavior).
+   * For multi-line declarations (e.g. functions with wrapped parameters), reconstructs
+   * the signature by joining lines up through the closing paren and return type,
+   * collapsing whitespace into single spaces. Truncates at 200 chars.
+   */
+  function extractSignature(node: SyntaxNode): string {
+    const startRow = node.startPosition.row;
+    const endRow = node.endPosition.row;
+    const fl = lines[startRow]?.trimEnd() ?? "";
+
+    // Single-line or short node — return as-is (preserving current behavior)
+    if (startRow === endRow || fl.includes("{")) {
+      return fl.length > 200 ? `${fl.slice(0, 197)}...` : fl;
+    }
+
+    // Multi-line: join lines from startRow until we find the opening brace or
+    // reach the end of the node, whichever comes first.
+    const parts: string[] = [fl.trimEnd()];
+    for (let row = startRow + 1; row <= Math.min(endRow, startRow + 20); row++) {
+      const line = (lines[row] ?? "").trimEnd();
+      parts.push(line.trim());
+      if (line.includes("{")) break;
+    }
+
+    // Join and collapse internal whitespace, clean up signature formatting
+    let sig = parts
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .replace(/\(\s+/g, "(")
+      .replace(/,\s*\)/g, ")")
+      .replace(/\s*\{\s*$/, "");
+    if (sig.length > 200) sig = `${sig.slice(0, 197)}...`;
+    return sig;
   }
 
   // Track skipped nodes to emit a collapsed summary
@@ -114,7 +147,7 @@ export async function extractOutline(source: string, config: LanguageConfig): Pr
         endLine: node.endPosition.row + 1,
         depth,
         nodeType: node.type,
-        text: firstLine(node),
+        text: extractSignature(node),
       });
 
       // For recurse types (e.g. class_body), visit their children
