@@ -187,4 +187,23 @@ describe("trueline_search", () => {
     });
     expect(result.isError).toBe(true);
   });
+  test("rejects pattern with embedded newlines", async () => {
+    const result = await handleSearch({
+      file_path: testFile,
+      pattern: "hello\nworld",
+      projectDir: testDir,
+    });
+    expect(result.isError).toBe(true);
+    expect(getText(result)).toContain("line-by-line");
+  });
+  test("rejects regex pattern with embedded newlines", async () => {
+    const result = await handleSearch({
+      file_path: testFile,
+      pattern: "hello\nworld",
+      regex: true,
+      projectDir: testDir,
+    });
+    expect(result.isError).toBe(true);
+    expect(getText(result)).toContain("line-by-line");
+  });
 });

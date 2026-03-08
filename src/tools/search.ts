@@ -44,7 +44,14 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
   if (!validated.ok) return validated.error;
 
-  // Build line matcher
+  // Build line matcher — search is line-by-line, so multiline patterns cannot match
+  if (pattern.includes("\n") || pattern.includes("\r")) {
+    return errorResult(
+      "Pattern contains newlines. trueline_search matches line-by-line, so multiline patterns cannot match. " +
+        "Search for a single-line substring instead, or use trueline_outline + trueline_read to find multiline blocks.",
+    );
+  }
+
   let matchLine: (text: string) => boolean;
   if (params.regex) {
     let regex: RegExp;
