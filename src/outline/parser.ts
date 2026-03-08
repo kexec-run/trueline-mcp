@@ -17,7 +17,11 @@ const languageCache = new Map<string, any>();
 /** Ensure web-tree-sitter WASM runtime is initialized (idempotent). */
 export async function ensureInit(): Promise<void> {
   if (initialized) return;
-  await Parser.init();
+  // Guard against WASM loading that hangs (e.g. missing .wasm files).
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("tree-sitter WASM init timed out after 10 s")), 10_000),
+  );
+  await Promise.race([Parser.init(), timeout]);
   initialized = true;
 }
 
