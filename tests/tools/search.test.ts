@@ -123,6 +123,27 @@ describe("trueline_search", () => {
     expect(getText(result)).toContain("Invalid regex");
   });
 
+  test("case_insensitive matches case-insensitively", async () => {
+    const result = await handleSearch({
+      file_path: testFile,
+      pattern: "HELLO",
+      case_insensitive: true,
+      projectDir: testDir,
+    });
+    const text = getText(result);
+    expect(text).toContain("hello");
+    expect(text).toContain("checksum:");
+  });
+
+  test("case_insensitive false (default) does not match wrong case", async () => {
+    const result = await handleSearch({
+      file_path: testFile,
+      pattern: "HELLO",
+      projectDir: testDir,
+    });
+    const text = getText(result);
+    expect(text).toContain("No matches");
+  });
   test("validates file path", async () => {
     const result = await handleSearch({
       file_path: "/etc/passwd",

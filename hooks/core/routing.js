@@ -66,8 +66,7 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
       if (canRead && canWrite) {
         return {
           action: "block",
-          reason:
-            "<trueline_redirect>" + "Use trueline_search \u2192 trueline_edit instead." + "</trueline_redirect>",
+          reason: "<trueline_redirect>Use trueline_search \u2192 trueline_edit instead.</trueline_redirect>",
         };
       }
     }
@@ -80,7 +79,7 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
       if (canRead) {
         return {
           action: "block",
-          reason: "<trueline_redirect>" + "Use trueline_read instead." + "</trueline_redirect>",
+          reason: "<trueline_redirect>Use trueline_read instead.</trueline_redirect>",
         };
       }
     }
@@ -101,7 +100,7 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
         }
         return {
           action: "block",
-          reason: "<trueline_redirect>" + "Use trueline_write instead." + "</trueline_redirect>",
+          reason: "<trueline_redirect>Use trueline_write instead.</trueline_redirect>",
         };
       }
     }

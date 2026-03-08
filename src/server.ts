@@ -200,10 +200,6 @@ server.registerTool(
         .optional(),
       max_matches: z.number().int().positive().describe("Maximum number of matches to return. Default: 10.").optional(),
       case_insensitive: z.boolean().describe("Case-insensitive matching. Default: false.").optional(),
-      hashes: z
-        .boolean()
-        .describe("Include per-line hashes. Default: true. Set false for discovery searches.")
-        .optional(),
     }),
   },
   safeTool(async (params) => {

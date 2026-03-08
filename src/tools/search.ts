@@ -17,6 +17,7 @@ interface SearchParams {
   pattern: string;
   context_lines?: number;
   max_matches?: number;
+  case_insensitive?: boolean;
   projectDir?: string;
   allowedDirs?: string[];
 }
@@ -45,7 +46,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   // Validate regex
   let regex: RegExp;
   try {
-    regex = new RegExp(pattern);
+    regex = new RegExp(pattern, params.case_insensitive ? "i" : undefined);
   } catch {
     return errorResult(`Invalid regex pattern: "${pattern}"`);
   }
