@@ -264,7 +264,7 @@ async function truelineExploreEdit(): Promise<ScenarioResult> {
   // edit call: range:hash format (no old_string echo)
   const editCall = jsonCallBytes({
     file_path: SAMPLE_FILE,
-    edits: [{ range: "100:ab..115:cd", checksum: "100-115:abcdef01", content: "// replaced content\n" }],
+    edits: [{ range: "100:ab-115:cd", checksum: "100-115:abcdef01", content: "// replaced content\n" }],
   });
   steps.push({
     tool: "edit (range:hash)",
@@ -296,7 +296,7 @@ async function truelineSearchFix(): Promise<ScenarioResult> {
   // edit from search results
   const editCall = jsonCallBytes({
     file_path: SAMPLE_FILE,
-    edits: [{ range: "10:ab..12:cd", checksum: "10-12:abcdef01", content: "// fixed\n" }],
+    edits: [{ range: "10:ab-12:cd", checksum: "10-12:abcdef01", content: "// fixed\n" }],
   });
   steps.push({
     tool: "edit (from search)",
@@ -344,7 +344,7 @@ async function truelineVerifyBeforeEdit(): Promise<ScenarioResult> {
   // Edit using held checksums (no re-read needed)
   const editCall = jsonCallBytes({
     file_path: SAMPLE_FILE,
-    edits: [{ range: "100:ab..115:cd", checksum: "74-150:abcdef01", content: "// replaced content\n" }],
+    edits: [{ range: "100:ab-115:cd", checksum: "74-150:abcdef01", content: "// replaced content\n" }],
   });
   steps.push({
     tool: "edit (cached checksums)",
