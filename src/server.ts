@@ -14,25 +14,7 @@ import { handleOutline } from "./tools/outline.ts";
 import { handleSearch } from "./tools/search.ts";
 import { handleVerify } from "./tools/verify.ts";
 import { scheduleUpdateCheck } from "./update-check.ts";
-
-// MCP clients sometimes send array/object parameters as JSON strings.
-// Coerce them back universally so individual schemas don't need z.preprocess.
-function coerceJsonStrings(val: unknown): unknown {
-  if (typeof val !== "object" || val === null) return val;
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(val as Record<string, unknown>)) {
-    if (typeof value === "string" && (value.startsWith("[") || value.startsWith("{"))) {
-      try {
-        result[key] = JSON.parse(value);
-      } catch {
-        result[key] = value;
-      }
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
+import { coerceParams } from "./coerce.ts";
 
 function safeTool<P>(handler: (params: P) => Promise<ToolResult>): (params: P) => Promise<ToolResult> {
   return async (params) => {
@@ -91,7 +73,7 @@ server.registerTool(
   {
     description: "Read a file; returns 'N:hash\tcontent' per line plus a checksum per range.",
     inputSchema: z.preprocess(
-      coerceJsonStrings,
+      coerceParams,
       z.object({
         file_path: z.string().describe("Absolute or project-relative file path."),
         ranges: z
@@ -125,7 +107,7 @@ server.registerTool(
   {
     description: "Apply hash-verified edits to a file. Each edit carries its own checksum.",
     inputSchema: z.preprocess(
-      coerceJsonStrings,
+      coerceParams,
       z.object({
         file_path: z.string().describe("Absolute or project-relative file path."),
         edits: z
@@ -156,7 +138,7 @@ server.registerTool(
       "Pass ALL files in a single call via file_paths (never call once per file). " +
       "Use instead of `git diff` to review changes with minimal token usage.",
     inputSchema: z.preprocess(
-      coerceJsonStrings,
+      coerceParams,
       z.object({
         file_paths: z
           .array(z.string())
@@ -181,7 +163,7 @@ server.registerTool(
       "Get a compact structural outline of source files (functions, classes, types, etc.) without reading the full content. " +
       "Much smaller than trueline_read \u2014 use first to find line ranges, then read specific sections.",
     inputSchema: z.preprocess(
-      coerceJsonStrings,
+      coerceParams,
       z.object({
         file_paths: z.array(z.string()).describe("One or more absolute or project-relative file paths to outline."),
         depth: z
@@ -207,7 +189,7 @@ server.registerTool(
       "Search a file for a literal string or regex pattern. Returns matching lines with context, per-line hashes, and checksums \u2014 " +
       "ready for immediate editing. Use instead of outline+read when you know what to look for.",
     inputSchema: z.preprocess(
-      coerceJsonStrings,
+      coerceParams,
       z.object({
         file_path: z.string().describe("Absolute or project-relative file path."),
         pattern: z.string().describe("Search string. Literal by default; set regex=true for regular expressions."),
@@ -243,7 +225,7 @@ server.registerTool(
       "Validate held checksums against a file. Returns which are valid or stale. " +
       "Cheaper than re-reading \u2014 use before editing when the file may have changed.",
     inputSchema: z.preprocess(
-      coerceJsonStrings,
+      coerceParams,
       z.object({
         file_path: z.string().describe("Absolute or project-relative file path."),
         checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
