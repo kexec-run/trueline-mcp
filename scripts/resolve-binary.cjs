@@ -55,7 +55,7 @@ function ensureDeps() {
   } catch (err) {
     // Non-fatal: outline won't work, but read/edit/search/diff/verify will.
     process.stderr.write(
-      `trueline-mcp: dependency install failed (${err.message}). ` + "trueline_outline will be unavailable.\n",
+      `trueline-mcp: dependency install failed (${err.message}). trueline_outline will be unavailable.\n`,
     );
   }
 }
