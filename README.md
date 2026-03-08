@@ -37,7 +37,7 @@ matches) the agent silently corrupts your code.
 
 ## How trueline fixes this
 
-trueline replaces the built-in `Read` and `Edit` with five tools that
+trueline replaces the built-in `Read` and `Edit` with six tools that
 are smaller, faster, and verified.
 
 ### Read less: `trueline_outline` + `trueline_read`
@@ -100,6 +100,10 @@ disk.
 
 No more silent corruption. No more ambiguous string matches.
 
+`trueline_verify` lets the agent check whether held checksums are still
+valid without re-reading the file. When the file hasn't changed (the
+common case), the response is a single line — near-zero tokens.
+
 ### Benchmarks
 
 Measured on real project files (`src/streaming-edit.ts`, 529 lines),
@@ -113,11 +117,15 @@ tokens):
 | Search & fix            |   22 731 |       812 |   96% |
 | Multi-region read       |   22 094 |     2 720 |   88% |
 | Multi-file exploration  |   39 296 |     1 761 |   96% |
-| **Total**               |**128 944**|  **17 417**| **86%** |
+| Verify before edit      |   44 823 |     3 608 |   92% |
+| **Total**               |**173 767**|  **21 025**| **88%** |
 
 The search-and-fix workflow saves the most: a single `trueline_search`
 call replaces grep + full-file read + old-string echo, cutting **96%**
-of token usage. Even the explore-then-edit workflow — which includes an
+of token usage. The verify-before-edit workflow shows how
+`trueline_verify` avoids a full re-read when checking whether held
+checksums are still valid — **92%** savings over re-reading the entire
+file. Even the explore-then-edit workflow — which includes an
 exploratory read, a targeted re-read, and an edit — still saves **63%**
 over the built-in equivalent.
 
