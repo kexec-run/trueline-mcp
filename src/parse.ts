@@ -35,8 +35,8 @@ function parseLineHash(ref: string): LineRef {
   if (line === 0 && hash !== "") {
     throw new Error(`Invalid line:hash reference "${ref}" — line 0 must have empty hash`);
   }
-  if (line > 0 && !/^[a-z2-7]{2}$/.test(hash)) {
-    throw new Error(`Invalid hash in "${ref}" — must be exactly 2 characters from a-z, 2-7`);
+  if (line > 0 && !/^[a-z]{2}$/.test(hash)) {
+    throw new Error(`Invalid hash in "${ref}" — must be exactly 2 lowercase letters`);
   }
 
   return { line, hash };
@@ -69,7 +69,7 @@ export function parseRange(range: string): RangeRef {
   }
 
   // Find "-" separator between two line:hash refs. Since neither line numbers
-  // (digits) nor hashes ([a-z2-7]{2}) contain "-", indexOf is unambiguous.
+  // (digits) nor hashes ([a-z]{2}) contain "-", indexOf is unambiguous.
   const dashIdx = raw.indexOf("-");
 
   if (insertAfter && dashIdx !== -1) {

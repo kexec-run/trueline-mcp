@@ -32,7 +32,7 @@ describe("fnv1aHash", () => {
 describe("lineHash", () => {
   test("returns exactly 2 lowercase letters", () => {
     const h = lineHash("console.log('hello')");
-    expect(h).toMatch(/^[a-z2-7]{2}$/);
+    expect(h).toMatch(/^[a-z]{2}$/);
   });
 
   test("deterministic", () => {
@@ -40,7 +40,7 @@ describe("lineHash", () => {
   });
 
   test("empty line produces valid hash", () => {
-    expect(lineHash("")).toMatch(/^[a-z2-7]{2}$/);
+    expect(lineHash("")).toMatch(/^[a-z]{2}$/);
   });
 });
 

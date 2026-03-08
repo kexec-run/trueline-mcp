@@ -90,26 +90,25 @@ export function formatChecksum(startLine: number, endLine: number, hash: number)
 }
 
 /**
- * 32-char alphabet: a-z + 2-7 (base32-like, all visually distinct).
- * Power-of-2 size enables bitwise AND instead of modulo division.
+ * 26-char alphabet: lowercase a-z only.
+ * Fewer combinations (676) than the prior base32 alphabet (1024),
+ * but LLMs transcribe pure-letter hashes more reliably.
  */
-const HASH_CHARS = "abcdefghijklmnopqrstuvwxyz234567";
+const HASH_CHARS = "abcdefghijklmnopqrstuvwxyz";
 
 /**
- * Pre-computed lookup table of all 1024 two-character hash tags.
+ * Pre-computed lookup table of all 676 two-character hash tags.
  * Avoids per-call string concatenation in the hot loop.
  */
 const LETTER_TABLE: string[] = /* @__PURE__ */ (() => {
-  const t = new Array<string>(1024);
-  for (let i = 0; i < 32; i++) for (let j = 0; j < 32; j++) t[i * 32 + j] = HASH_CHARS[i] + HASH_CHARS[j];
+  const t = new Array<string>(676);
+  for (let i = 0; i < 26; i++) for (let j = 0; j < 26; j++) t[i * 26 + j] = HASH_CHARS[i] + HASH_CHARS[j];
   return t;
 })();
 
 /**
- * Map an FNV-1a hash to a two-character tag (1024 possible values).
- * Uses `& 0x1f` (bitwise AND) instead of `% 26` (integer division)
- * for the index computation.
+ * Map an FNV-1a hash to a two-character tag (676 possible values).
  */
 export function hashToLetters(h: number): string {
-  return LETTER_TABLE[((h & 0x1f) << 5) | ((h >>> 8) & 0x1f)];
+  return LETTER_TABLE[((h >>> 0) % 26) * 26 + (((h >>> 8) >>> 0) % 26)];
 }
