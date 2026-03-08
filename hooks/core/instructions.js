@@ -80,6 +80,7 @@ export function getInstructions(platform = "claude-code") {
     <rule>${rules.readAdvice}</rule>
     <rule>${rules.writeAdvice}</rule>
     <rule>Prefer trueline_outline first. Only call trueline_read for specific ranges you need (to edit, debug, or understand details). Read whole files only when short and you haven't used outline.</rule>
+    <rule>When you already know the text to change, use trueline_search → trueline_edit (skips the read). This is the fastest edit path.</rule>
     <rule>When you need to find a pattern across many files, use Grep to identify the files, then use trueline_search on individual files you need to edit.</rule>
 </trueline_mcp_instructions>`;
 }
