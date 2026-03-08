@@ -14,6 +14,18 @@ let initialized = false;
 // biome-ignore lint/suspicious/noExplicitAny: web-tree-sitter 0.24.x has no usable type exports
 const languageCache = new Map<string, any>();
 
+/**
+ * Resolve the path to tree-sitter.wasm at runtime.
+ *
+ * bun build --target=node hardcodes the WASM path from the build environment
+ * (e.g. /home/runner/work/…) into the bundle. We override with locateFile so
+ * the path is resolved from the actual node_modules at runtime.
+ */
+function treeSitterWasmPath(): string {
+  const entry = require.resolve("web-tree-sitter/package.json");
+  return resolve(dirname(entry), "tree-sitter.wasm");
+}
+
 /** Ensure web-tree-sitter WASM runtime is initialized (idempotent). */
 export async function ensureInit(): Promise<void> {
   if (initialized) return;
@@ -21,7 +33,7 @@ export async function ensureInit(): Promise<void> {
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error("tree-sitter WASM init timed out after 10 s")), 10_000),
   );
-  await Promise.race([Parser.init(), timeout]);
+  await Promise.race([Parser.init({ locateFile: () => treeSitterWasmPath() }), timeout]);
   initialized = true;
 }
 
