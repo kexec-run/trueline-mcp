@@ -107,7 +107,9 @@ server.registerTool(
     inputSchema: z.preprocess(
       coerceParams,
       z.object({
-        file_path: z.string().describe("Absolute or project-relative file path."),
+        file_path: z
+          .string({ required_error: "file_path is required" })
+          .describe("Absolute or project-relative file path."),
         edits: z
           .array(
             z.object({
@@ -140,7 +142,7 @@ server.registerTool(
       coerceParams,
       z.object({
         file_paths: z
-          .array(z.string())
+          .array(z.string({ required_error: "file_paths is required" }))
           .min(1)
           .describe('Paths to diff. Pass multiple files in one call. Use ["*"] for all changed files.'),
         compare_against: z
@@ -164,7 +166,9 @@ server.registerTool(
     inputSchema: z.preprocess(
       coerceParams,
       z.object({
-        file_paths: z.array(z.string()).describe("One or more absolute or project-relative file paths to outline."),
+        file_paths: z
+          .array(z.string({ required_error: "file_paths is required" }))
+          .describe("One or more absolute or project-relative file paths to outline."),
         depth: z
           .number()
           .int()
@@ -190,8 +194,12 @@ server.registerTool(
     inputSchema: z.preprocess(
       coerceParams,
       z.object({
-        file_path: z.string().describe("Absolute or project-relative file path."),
-        pattern: z.string().describe("Search string. Literal by default; set regex=true for regular expressions."),
+        file_path: z
+          .string({ required_error: "file_path is required" })
+          .describe("Absolute or project-relative file path."),
+        pattern: z
+          .string({ required_error: "pattern is required" })
+          .describe("Search string. Literal by default; set regex=true for regular expressions."),
         context_lines: z
           .number()
           .int()
@@ -226,7 +234,9 @@ server.registerTool(
     inputSchema: z.preprocess(
       coerceParams,
       z.object({
-        file_path: z.string().describe("Absolute or project-relative file path."),
+        file_path: z
+          .string({ required_error: "file_path is required" })
+          .describe("Absolute or project-relative file path."),
         checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
       }),
     ),
