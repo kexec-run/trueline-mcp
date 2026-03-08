@@ -75,13 +75,6 @@ describe("parseRanges", () => {
 });
 
 describe("parseRange", () => {
-  test("parses standard double-dot range", () => {
-    const result = parseRange("16:kq-17:yx");
-    expect(result.start).toEqual({ line: 16, hash: "kq" });
-    expect(result.end).toEqual({ line: 17, hash: "yx" });
-    expect(result.insertAfter).toBe(false);
-  });
-
   test("parses dash-separated range", () => {
     const result = parseRange("16:kq-17:yx");
     expect(result.start).toEqual({ line: 16, hash: "kq" });
