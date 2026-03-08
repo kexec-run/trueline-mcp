@@ -38,13 +38,12 @@ describe("parseRanges", () => {
     expect(result).toEqual([{ start: 10, end: Infinity }]);
   });
 
-  test("throws on overlapping ranges", () => {
-    expect(() =>
-      parseRanges([
-        { start: 1, end: 20 },
-        { start: 15, end: 30 },
-      ]),
-    ).toThrow(/overlap/i);
+  test("merges overlapping ranges", () => {
+    const result = parseRanges([
+      { start: 1, end: 20 },
+      { start: 15, end: 30 },
+    ]);
+    expect(result).toEqual([{ start: 1, end: 30 }]);
   });
 
   test("merges adjacent ranges", () => {

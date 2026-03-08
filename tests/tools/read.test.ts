@@ -128,7 +128,7 @@ describe("handleRead", () => {
     expect(checksumMatches).toHaveLength(1);
   });
 
-  test("rejects overlapping ranges", async () => {
+  test("merges overlapping ranges", async () => {
     const overlapFile = join(testDir, "overlap.txt");
     writeFileSync(overlapFile, "a\nb\nc\nd\n");
     const result = await handleRead({
@@ -139,7 +139,11 @@ describe("handleRead", () => {
       ],
       projectDir: testDir,
     });
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("1:");
+    expect(text).toContain("4:");
+    expect(text).toContain("checksum: 1-4:");
   });
 
   test("hash is based on raw file bytes, not decoded string", async () => {

@@ -186,11 +186,8 @@ export function parseRanges(ranges: RangeInput[] | undefined): ReadRange[] {
   for (let i = 1; i < parsed.length; i++) {
     const prev = parsed[i - 1];
     const curr = parsed[i];
-    if (prev.end === Infinity || curr.start <= prev.end) {
-      throw new Error(`Ranges overlap: ${prev.start}-${prev.end} and ${curr.start}-${curr.end}`);
-    }
-    if (curr.start === prev.end + 1) {
-      prev.end = curr.end;
+    if (prev.end === Infinity || curr.start <= prev.end + 1) {
+      prev.end = Math.max(prev.end, curr.end);
       parsed.splice(i, 1);
       i--;
     }
