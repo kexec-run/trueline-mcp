@@ -100,6 +100,29 @@ disk.
 
 No more silent corruption. No more ambiguous string matches.
 
+### Benchmarks
+
+Measured on real project files (`src/streaming-edit.ts`, 529 lines),
+comparing total bytes through the context window (call + result, ÷4 ≈
+tokens):
+
+| Workflow                | Built-in |  Trueline | Saved |
+|-------------------------|----------|-----------|-------|
+| Navigate & understand   |   22 094 |     3 609 |   84% |
+| Explore then edit       |   22 729 |     8 515 |   63% |
+| Search & fix            |   22 731 |       812 |   96% |
+| Multi-region read       |   22 094 |     2 720 |   88% |
+| Multi-file exploration  |   39 296 |     1 761 |   96% |
+| **Total**               |**128 944**|  **17 417**| **86%** |
+
+The search-and-fix workflow saves the most: a single `trueline_search`
+call replaces grep + full-file read + old-string echo, cutting **96%**
+of token usage. Even the explore-then-edit workflow — which includes an
+exploratory read, a targeted re-read, and an edit — still saves **63%**
+over the built-in equivalent.
+
+Run the benchmark yourself: `bun run benchmarks/token-benchmark.ts`
+
 ## Design
 
 See [DESIGN.md](DESIGN.md) for the protocol specification, hash
