@@ -99,7 +99,7 @@ describe("single-line file edits", () => {
       edits: [
         {
           checksum: cs,
-          range: `2:${lineHash("bbb")}..3:${lineHash("ccc")}`,
+          range: `2:${lineHash("bbb")}-3:${lineHash("ccc")}`,
           content: "merged",
         },
       ],
@@ -319,7 +319,7 @@ describe("multi-line replacements", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
+          range: `1:${lineHash("aaa")}-3:${lineHash("ccc")}`,
           content: "entirely\nnew",
         },
       ],
@@ -362,7 +362,7 @@ describe("multi-line replacements", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
+          range: `1:${lineHash("aaa")}-3:${lineHash("ccc")}`,
           content: "",
         },
       ],
@@ -409,7 +409,7 @@ describe("no-op detection", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
+          range: `1:${lineHash("aaa")}-3:${lineHash("ccc")}`,
           content: "aaa\nbbb\nccc",
         },
       ],
@@ -554,7 +554,7 @@ describe("line ending preservation", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}..2:${lineHash("bbb")}`,
+          range: `1:${lineHash("aaa")}-2:${lineHash("bbb")}`,
           content: "XXX\nYYY\nZZZ",
         },
       ],
@@ -785,8 +785,8 @@ describe("overlap detection", () => {
     const result = await handleEdit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `1:${lineHash("aaa")}..2:${lineHash("bbb")}`, content: "AB" },
-        { checksum: cs, range: `3:${lineHash("ccc")}..4:${lineHash("ddd")}`, content: "CD" },
+        { checksum: cs, range: `1:${lineHash("aaa")}-2:${lineHash("bbb")}`, content: "AB" },
+        { checksum: cs, range: `3:${lineHash("ccc")}-4:${lineHash("ddd")}`, content: "CD" },
       ],
       projectDir: testDir,
     });
@@ -835,7 +835,8 @@ describe("hash verification", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:zz..3:${lineHash("ccc")}`,
+          range: `1:zz-3:${lineHash("ccc")}`,
+
           content: "new",
         },
       ],
@@ -854,7 +855,7 @@ describe("hash verification", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}..3:zz`,
+          range: `1:${lineHash("aaa")}-3:zz`,
           content: "new",
         },
       ],
@@ -873,7 +874,7 @@ describe("hash verification", () => {
       edits: [
         {
           checksum: cs,
-          range: `1:${lineHash("aaa")}..3:${lineHash("ccc")}`,
+          range: `1:${lineHash("aaa")}-3:${lineHash("ccc")}`,
           content: "only",
         },
       ],

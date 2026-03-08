@@ -114,7 +114,8 @@ server.registerTool(
           .array(
             z.object({
               checksum: z.string().describe("Checksum from trueline_read for the covering range"),
-              range: z.string().describe("startLine:hash..endLine:hash or startLine:hash; prefix + for insert-after"),
+              range: z.string().describe("startLine:hash-endLine:hash or startLine:hash; prefix + for insert-after"),
+
               content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
             }),
           )

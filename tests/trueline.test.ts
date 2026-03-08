@@ -72,13 +72,13 @@ describe("rangeChecksum", () => {
 
 describe("parseRange", () => {
   test("parses valid range", () => {
-    const r = parseRange("12:gh..21:yz");
+    const r = parseRange("12:gh-21:yz");
     expect(r.start).toEqual({ line: 12, hash: "gh" });
     expect(r.end).toEqual({ line: 21, hash: "yz" });
   });
 
   test("parses single-line range", () => {
-    const r = parseRange("5:ab..5:ab");
+    const r = parseRange("5:ab-5:ab");
     expect(r.start.line).toBe(5);
     expect(r.end.line).toBe(5);
   });
@@ -95,13 +95,14 @@ describe("parseRange", () => {
     expect(r.start).not.toBe(r.end); // must be distinct objects
   });
 
-  test("throws on malformed range (not a valid line:hash either)", () => {
-    // "12:gh-21:yz" has no ".." and the hash "gh-21:yz" is not 2 valid hash chars
-    expect(() => parseRange("12:gh-21:yz")).toThrow("must be exactly 2 characters");
+  test("parses dash-separated range", () => {
+    const r = parseRange("12:gh-21:yz");
+    expect(r.start).toEqual({ line: 12, hash: "gh" });
+    expect(r.end).toEqual({ line: 21, hash: "yz" });
   });
 
   test("throws when start > end", () => {
-    expect(() => parseRange("21:ab..12:cd")).toThrow("must be ≤");
+    expect(() => parseRange("21:ab-12:cd")).toThrow("must be ≤");
   });
 });
 

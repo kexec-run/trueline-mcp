@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseRanges } from "../src/parse.ts";
+import { parseRange, parseRanges } from "../src/parse.ts";
 
 describe("parseRanges", () => {
   test("returns whole-file sentinel for undefined input", () => {
@@ -71,5 +71,37 @@ describe("parseRanges", () => {
       { start: 1, end: 10 },
       { start: 20, end: 30 },
     ]);
+  });
+});
+
+describe("parseRange", () => {
+  test("parses standard double-dot range", () => {
+    const result = parseRange("16:kq-17:yx");
+    expect(result.start).toEqual({ line: 16, hash: "kq" });
+    expect(result.end).toEqual({ line: 17, hash: "yx" });
+    expect(result.insertAfter).toBe(false);
+  });
+
+  test("parses dash-separated range", () => {
+    const result = parseRange("16:kq-17:yx");
+    expect(result.start).toEqual({ line: 16, hash: "kq" });
+    expect(result.end).toEqual({ line: 17, hash: "yx" });
+    expect(result.insertAfter).toBe(false);
+  });
+
+  test("parses single line reference", () => {
+    const result = parseRange("5:ab");
+    expect(result.start).toEqual({ line: 5, hash: "ab" });
+    expect(result.end).toEqual({ line: 5, hash: "ab" });
+  });
+
+  test("parses insert-after prefix", () => {
+    const result = parseRange("+10:cd");
+    expect(result.insertAfter).toBe(true);
+    expect(result.start).toEqual({ line: 10, hash: "cd" });
+  });
+
+  test("rejects insert-after with range", () => {
+    expect(() => parseRange("+10:cd-20:ef")).toThrow(/insert-after/);
   });
 });

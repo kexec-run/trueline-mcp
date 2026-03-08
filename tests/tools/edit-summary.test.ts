@@ -51,7 +51,7 @@ describe("edit summary", () => {
     const h4 = lineHash("ddd");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `2:${h2}..4:${h4}`, content: "xxx" }],
+      edits: [{ checksum: cs, range: `2:${h2}-4:${h4}`, content: "xxx" }],
     });
 
     const text = result.content[0].text;
@@ -75,7 +75,7 @@ describe("edit summary", () => {
     const h2 = lineHash("bbb");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `1:${h1}..2:${h2}`, content: "" }],
+      edits: [{ checksum: cs, range: `1:${h1}-2:${h2}`, content: "" }],
     });
 
     const text = result.content[0].text;

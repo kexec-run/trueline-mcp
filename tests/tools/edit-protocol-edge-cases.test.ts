@@ -39,7 +39,7 @@ function edit(opts: { file_path: string; edits: { checksum: string; range: strin
 // =============================================================================
 
 describe("range format parsing", () => {
-  test("single-line shorthand (no ..)", async () => {
+  test("single-line shorthand (no dash)", async () => {
     const { path, cs } = setupFile("single.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
@@ -52,13 +52,13 @@ describe("range format parsing", () => {
     expect(readFileSync(path, "utf-8")).toBe("aaa\nBBB\nccc\n");
   });
 
-  test("explicit single-line range (N:hash..N:hash)", async () => {
+  test("explicit single-line range (N:hash-N:hash)", async () => {
     const { path, cs } = setupFile("explicit.txt", "aaa\nbbb\nccc\n");
     const h2 = lineHash("bbb");
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `2:${h2}..2:${h2}`, content: "BBB" }],
+      edits: [{ checksum: cs, range: `2:${h2}-2:${h2}`, content: "BBB" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -82,7 +82,7 @@ describe("range format parsing", () => {
     await expect(
       edit({
         file_path: path,
-        edits: [{ checksum: cs, range: "abc:aa..2:bb", content: "x" }],
+        edits: [{ checksum: cs, range: "abc:aa-2:bb", content: "x" }],
       }),
     ).rejects.toThrow();
   });
@@ -95,7 +95,7 @@ describe("range format parsing", () => {
     await expect(
       edit({
         file_path: path,
-        edits: [{ checksum: cs, range: `3:${h3}..1:${h1}`, content: "x" }],
+        edits: [{ checksum: cs, range: `3:${h3}-1:${h1}`, content: "x" }],
       }),
     ).rejects.toThrow();
   });
@@ -106,7 +106,7 @@ describe("range format parsing", () => {
     await expect(
       edit({
         file_path: path,
-        edits: [{ checksum: cs, range: "0:aa..0:aa", content: "x" }],
+        edits: [{ checksum: cs, range: "0:aa-0:aa", content: "x" }],
       }),
     ).rejects.toThrow();
   });
@@ -129,7 +129,7 @@ describe("range format parsing", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `99:${h}..99:${h}`, content: "x" }],
+      edits: [{ checksum: cs, range: `99:${h}-99:${h}`, content: "x" }],
     });
 
     expect(result.isError).toBe(true);
@@ -284,8 +284,8 @@ describe("multi-edit batches", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `1:${h1}..2:${h2}`, content: "X" },
-        { checksum: cs, range: `2:${h2}..3:${h3}`, content: "Y" },
+        { checksum: cs, range: `1:${h1}-2:${h2}`, content: "X" },
+        { checksum: cs, range: `2:${h2}-3:${h3}`, content: "Y" },
       ],
     });
 
@@ -303,8 +303,8 @@ describe("multi-edit batches", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `1:${h1}..2:${h2}`, content: "AA\nBB" },
-        { checksum: cs, range: `3:${h3}..4:${h4}`, content: "CC\nDD" },
+        { checksum: cs, range: `1:${h1}-2:${h2}`, content: "AA\nBB" },
+        { checksum: cs, range: `3:${h3}-4:${h4}`, content: "CC\nDD" },
       ],
     });
 
@@ -413,7 +413,7 @@ describe("content growth and shrinkage", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `2:${h2}..4:${h4}`, content: "only" }],
+      edits: [{ checksum: cs, range: `2:${h2}-4:${h4}`, content: "only" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -427,7 +427,7 @@ describe("content growth and shrinkage", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `2:${h2}..3:${h3}`, content: "" }],
+      edits: [{ checksum: cs, range: `2:${h2}-3:${h3}`, content: "" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -441,7 +441,7 @@ describe("content growth and shrinkage", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `1:${h1}..2:${h2}`, content: "" }],
+      edits: [{ checksum: cs, range: `1:${h1}-2:${h2}`, content: "" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -652,7 +652,7 @@ describe("no-op detection", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `1:${h1}..3:${h3}`, content: "aaa\nbbb\nccc" }],
+      edits: [{ checksum: cs, range: `1:${h1}-3:${h3}`, content: "aaa\nbbb\nccc" }],
     });
 
     expect(result.isError).toBeUndefined();
@@ -834,7 +834,7 @@ describe("boundary hash verification", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `1:zz..2:${lineHash("bbb")}`, content: "x\ny" }],
+      edits: [{ checksum: cs, range: `1:zz-2:${lineHash("bbb")}`, content: "x\ny" }],
     });
 
     expect(result.isError).toBe(true);
@@ -846,7 +846,7 @@ describe("boundary hash verification", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: lineHash("aaa") ? `1:${lineHash("aaa")}..2:zz` : "1:aa..2:zz", content: "x\ny" }],
+      edits: [{ checksum: cs, range: lineHash("aaa") ? `1:${lineHash("aaa")}-2:zz` : "1:aa-2:zz", content: "x\ny" }],
     });
 
     expect(result.isError).toBe(true);
@@ -860,7 +860,7 @@ describe("boundary hash verification", () => {
 
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `1:${h1}..4:${h4}`, content: "only one line" }],
+      edits: [{ checksum: cs, range: `1:${h1}-4:${h4}`, content: "only one line" }],
     });
 
     expect(result.isError).toBeUndefined();

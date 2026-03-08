@@ -18,7 +18,7 @@ afterEach(() => {
 
 describe("validateEdits", () => {
   test("accepts valid single replace edit", () => {
-    const result = validateEdits([{ checksum: "1-4:abcdef01", range: "2:ab..3:cd", content: "x\ny" }]);
+    const result = validateEdits([{ checksum: "1-4:abcdef01", range: "2:ab-3:cd", content: "x\ny" }]);
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.ops).toHaveLength(1);
@@ -45,7 +45,7 @@ describe("validateEdits", () => {
   });
 
   test("rejects checksum that does not cover edit range", () => {
-    const result = validateEdits([{ checksum: "1-2:abcdef01", range: "4:ab..4:ab", content: "x" }]);
+    const result = validateEdits([{ checksum: "1-2:abcdef01", range: "4:ab-4:ab", content: "x" }]);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.content[0].text).toContain("does not cover");
@@ -54,8 +54,8 @@ describe("validateEdits", () => {
 
   test("rejects overlapping replace ranges", () => {
     const result = validateEdits([
-      { checksum: "1-4:abcdef01", range: "1:aa..2:bb", content: "A" },
-      { checksum: "1-4:abcdef01", range: "2:bb..2:bb", content: "B" },
+      { checksum: "1-4:abcdef01", range: "1:aa-2:bb", content: "A" },
+      { checksum: "1-4:abcdef01", range: "2:bb-2:bb", content: "B" },
     ]);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -77,7 +77,7 @@ describe("validateEdits", () => {
   test("rejects insert-after inside a replace range", () => {
     // Replace covers lines 2-4, insert-after at line 3 is ambiguous
     const result = validateEdits([
-      { checksum: "1-5:abcdef01", range: "2:aa..4:bb", content: "A\nB\nC" },
+      { checksum: "1-5:abcdef01", range: "2:aa-4:bb", content: "A\nB\nC" },
       { checksum: "1-5:abcdef01", range: "+3:cc", content: "inserted" },
     ]);
     expect(result.ok).toBe(false);
@@ -89,7 +89,7 @@ describe("validateEdits", () => {
   test("allows insert-after at end of replace range (not inside)", () => {
     // Replace covers lines 2-4, insert-after at line 4 is at the boundary
     const result = validateEdits([
-      { checksum: "1-5:abcdef01", range: "2:aa..4:bb", content: "A\nB\nC" },
+      { checksum: "1-5:abcdef01", range: "2:aa-4:bb", content: "A\nB\nC" },
       { checksum: "1-5:abcdef01", range: "+4:bb", content: "after replace" },
     ]);
     expect(result.ok).toBe(true);
@@ -135,7 +135,7 @@ describe("streamingEdit", () => {
     const h2 = lineHash("line 2");
     const h3 = lineHash("line 3");
 
-    const result = await runEdit(f, [{ range: `2:${h2}..3:${h3}`, content: "replaced 2\nreplaced 3" }], cs);
+    const result = await runEdit(f, [{ range: `2:${h2}-3:${h3}`, content: "replaced 2\nreplaced 3" }], cs);
     expect(result.ok).toBe(true);
     expect(readFileSync(f, "utf-8")).toBe("line 1\nreplaced 2\nreplaced 3\nline 4\n");
   });
@@ -267,7 +267,7 @@ describe("streamingEdit", () => {
     writeFileSync(f, "line 1\nline 2\nline 3\n");
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([{ checksum: "1-3:00000000", range: "1:aa..1:aa", content: "nope" }]);
+    const validated = validateEdits([{ checksum: "1-3:00000000", range: "1:aa-1:aa", content: "nope" }]);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
@@ -282,7 +282,7 @@ describe("streamingEdit", () => {
     const cs = rangeChecksum(lines, 1, 3);
     const { mtimeMs } = statSync(f);
 
-    const validated = validateEdits([{ checksum: cs, range: "1:zz..1:zz", content: "nope" }]);
+    const validated = validateEdits([{ checksum: cs, range: "1:zz-1:zz", content: "nope" }]);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
@@ -296,7 +296,7 @@ describe("streamingEdit", () => {
     const { mtimeMs } = statSync(f);
     const h = lineHash("only");
 
-    const validated = validateEdits([{ checksum: "1-5:abcdef01", range: `1:${h}..1:${h}`, content: "x" }]);
+    const validated = validateEdits([{ checksum: "1-5:abcdef01", range: `1:${h}-1:${h}`, content: "x" }]);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
@@ -401,7 +401,7 @@ describe("streamingEdit", () => {
     const { mtimeMs } = statSync(f);
 
     // Wrong checksum to trigger a mismatch error
-    const validated = validateEdits([{ checksum: "1-2:00000000", range: "1:aa..1:aa", content: "x" }]);
+    const validated = validateEdits([{ checksum: "1-2:00000000", range: "1:aa-1:aa", content: "x" }]);
     if (!validated.ok) return;
 
     const result = await streamingEdit(f, validated.ops, validated.checksumRefs, mtimeMs);
