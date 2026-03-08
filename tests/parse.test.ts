@@ -47,13 +47,12 @@ describe("parseRanges", () => {
     ).toThrow(/overlap/i);
   });
 
-  test("throws on adjacent ranges", () => {
-    expect(() =>
-      parseRanges([
-        { start: 1, end: 20 },
-        { start: 21, end: 30 },
-      ]),
-    ).toThrow(/adjacent/i);
+  test("merges adjacent ranges", () => {
+    const result = parseRanges([
+      { start: 1, end: 20 },
+      { start: 21, end: 30 },
+    ]);
+    expect(result).toEqual([{ start: 1, end: 30 }]);
   });
 
   test("throws on start < 1", () => {

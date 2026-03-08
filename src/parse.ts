@@ -182,7 +182,7 @@ export function parseRanges(ranges: RangeInput[] | undefined): ReadRange[] {
 
   parsed.sort((a, b) => a.start - b.start);
 
-  // Check for overlapping or adjacent ranges
+  // Merge overlapping or adjacent ranges
   for (let i = 1; i < parsed.length; i++) {
     const prev = parsed[i - 1];
     const curr = parsed[i];
@@ -190,9 +190,9 @@ export function parseRanges(ranges: RangeInput[] | undefined): ReadRange[] {
       throw new Error(`Ranges overlap: ${prev.start}-${prev.end} and ${curr.start}-${curr.end}`);
     }
     if (curr.start === prev.end + 1) {
-      throw new Error(
-        `Ranges are adjacent: ${prev.start}-${prev.end} and ${curr.start}-${curr.end}. Merge into a single range.`,
-      );
+      prev.end = curr.end;
+      parsed.splice(i, 1);
+      i--;
     }
   }
 
