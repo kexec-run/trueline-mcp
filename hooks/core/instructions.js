@@ -75,6 +75,12 @@ export function getInstructions(platform = "claude-code") {
   const editRule = rules.editAdvice ? `\n    <rule>${rules.editAdvice}</rule>` : "";
   const atRefRule = rules.atRefAdvice ? `\n    <rule>${rules.atRefAdvice}</rule>` : "";
 
+  // Platforms with deferred/lazy tool loading benefit from a batch-load hint.
+  const deferredHint =
+    platform === "claude-code" || platform === "vscode-copilot"
+      ? `\n  <deferred_loading>When trueline tools are deferred, load all in one ToolSearch call: +trueline read edit</deferred_loading>`
+      : "";
+
   return `<trueline_mcp_instructions>
   <tools>
     <tool name="trueline_read">Read files. Pass hashes=false when you only need to understand code, not edit it.</tool>
@@ -87,7 +93,8 @@ export function getInstructions(platform = "claude-code") {
   <workflow>trueline_outline → trueline_read (targeted ranges) → trueline_edit (use dry_run=true to preview)</workflow>
   <workflow>trueline_search → trueline_edit (no re-read needed)</workflow>
   <workflow>trueline_verify → trueline_read (re-read only stale ranges) → trueline_edit</workflow>
-  <workflow>trueline_diff → review structural changes vs git state</workflow>
+  <workflow>trueline_diff → review structural changes vs git state</workflow>${deferredHint}
+
   <rules>${editRule}
     <rule>${rules.readAdvice}</rule>
     <rule>${rules.writeAdvice}</rule>
