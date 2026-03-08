@@ -71,9 +71,11 @@ export function getInstructions(platform = "claude-code") {
     <tool name="trueline_outline">Structural outline — often enough on its own. Use to find line ranges before targeted reads.</tool>
     <tool name="trueline_search">Regex search with hashes — edit-ready results. Preferred over Grep for single-file searches.</tool>
     <tool name="trueline_write">Create/overwrite files. Returns checksum.</tool>
+    <tool name="trueline_verify">Check if held checksums are still valid. Cheaper than re-reading.</tool>
   </tools>
   <workflow>trueline_outline → trueline_read (targeted ranges) → trueline_diff (optional) → trueline_edit</workflow>
   <workflow>trueline_search → trueline_edit (no re-read needed)</workflow>
+  <workflow>trueline_verify → trueline_read (only if stale) → trueline_edit</workflow>
   <rules>${editRule}
     <rule>${rules.readAdvice}</rule>
     <rule>${rules.writeAdvice}</rule>
