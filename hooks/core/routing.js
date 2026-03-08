@@ -67,7 +67,7 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
         return {
           action: "block",
           reason:
-            "<trueline_redirect>" + "Edit is blocked. Use trueline_read then trueline_edit." + "</trueline_redirect>",
+            "<trueline_redirect>" + "Use trueline_search \u2192 trueline_edit instead." + "</trueline_redirect>",
         };
       }
     }
@@ -80,11 +80,7 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
       if (canRead) {
         return {
           action: "block",
-          reason:
-            "<trueline_redirect>" +
-            "Read is blocked for this file. Use trueline_read instead. " +
-            "trueline_read returns per-line hashes and a checksum needed for trueline_edit." +
-            "</trueline_redirect>",
+          reason: "<trueline_redirect>" + "Use trueline_read instead." + "</trueline_redirect>",
         };
       }
     }
@@ -105,11 +101,7 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
         }
         return {
           action: "block",
-          reason:
-            "<trueline_redirect>" +
-            "Use trueline_write instead of Write for files in the project directory. " +
-            "trueline_write returns a checksum for verification." +
-            "</trueline_redirect>",
+          reason: "<trueline_redirect>" + "Use trueline_write instead." + "</trueline_redirect>",
         };
       }
     }
