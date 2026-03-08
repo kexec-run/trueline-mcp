@@ -317,4 +317,71 @@ describe("trueline_outline", () => {
     const text = getText(result);
     expect(text).toContain("function add(a: number, b: number): number {");
   });
+
+  test("depth: 0 returns only top-level declarations", async () => {
+    const file = writeTestFile(
+      "depth0.ts",
+      [
+        "class MyClass {",
+        "  name: string;",
+        "  constructor(name: string) {",
+        "    this.name = name;",
+        "  }",
+        "  greet(): string {",
+        "    return this.name;",
+        "  }",
+        "}",
+        "",
+        "function topLevel() {",
+        "  return 42;",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await handleOutline({ file_path: file, depth: 0, projectDir: testDir });
+    const text = getText(result);
+    // Top-level class and function should appear
+    expect(text).toContain("class MyClass");
+    expect(text).toContain("function topLevel()");
+    // Class members should NOT appear at depth 0
+    expect(text).not.toContain("constructor");
+    expect(text).not.toContain("greet");
+  });
+
+  test("depth: 1 includes class members", async () => {
+    const file = writeTestFile(
+      "depth1.ts",
+      [
+        "class MyClass {",
+        "  constructor(name: string) {",
+        "    this.name = name;",
+        "  }",
+        "  greet(): string {",
+        "    return this.name;",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = await handleOutline({ file_path: file, depth: 1, projectDir: testDir });
+    const text = getText(result);
+    expect(text).toContain("class MyClass");
+    expect(text).toContain("constructor");
+    expect(text).toContain("greet");
+  });
+
+  test("no depth param returns all levels (same as unlimited)", async () => {
+    const file = writeTestFile(
+      "depth-default.ts",
+      ["class MyClass {", "  greet(): string {", "    return 'hello';", "  }", "}", ""].join("\n"),
+    );
+
+    const withoutDepth = await handleOutline({ file_path: file, projectDir: testDir });
+    const withInfinity = await handleOutline({ file_path: file, depth: undefined, projectDir: testDir });
+    expect(getText(withoutDepth)).toEqual(getText(withInfinity));
+    // Both should include members
+    expect(getText(withoutDepth)).toContain("greet");
+  });
 });

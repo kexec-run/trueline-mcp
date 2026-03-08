@@ -13,6 +13,7 @@ import { handleRead } from "./tools/read.ts";
 import { handleOutline } from "./tools/outline.ts";
 import { handleSearch } from "./tools/search.ts";
 import { handleWrite } from "./tools/write.ts";
+import { handleVerify } from "./tools/verify.ts";
 import { scheduleUpdateCheck } from "./update-check.ts";
 
 function safeTool<P>(handler: (params: P) => Promise<ToolResult>): (params: P) => Promise<ToolResult> {
@@ -162,6 +163,14 @@ server.registerTool(
       "Much smaller than trueline_read — use this first to understand file structure, then read specific ranges.",
     inputSchema: z.object({
       file_path: z.string(),
+      depth: z
+        .number()
+        .int()
+        .min(0)
+        .describe(
+          "Maximum nesting depth. 0 = top-level only, 1 = include class/interface members. Omit for all levels.",
+        )
+        .optional(),
     }),
   },
   safeTool(async (params) => {
@@ -209,6 +218,23 @@ server.registerTool(
   },
   safeTool(async (params) => {
     return handleWrite({ ...params, projectDir, allowedDirs });
+  }),
+);
+
+server.registerTool(
+  "trueline_verify",
+  {
+    description:
+      "Check whether held checksums are still valid for a file. " +
+      "Pass checksums from a prior trueline_read; returns which are valid or stale. " +
+      "Much cheaper than re-reading — use before editing when the file may have changed.",
+    inputSchema: z.object({
+      file_path: z.string(),
+      checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
+    }),
+  },
+  safeTool(async (params) => {
+    return handleVerify({ ...params, projectDir, allowedDirs });
   }),
 );
 

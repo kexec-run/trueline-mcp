@@ -31,7 +31,11 @@ export interface OutlineEntry {
 }
 
 /** Extract outline entries from source code. */
-export async function extractOutline(source: string, config: LanguageConfig): Promise<OutlineEntry[]> {
+export async function extractOutline(
+  source: string,
+  config: LanguageConfig,
+  maxDepth = Infinity,
+): Promise<OutlineEntry[]> {
   const parser = await createParser(config.grammar);
   const tree = parser.parse(source);
   const lines = source.split("\n");
@@ -152,12 +156,14 @@ export async function extractOutline(source: string, config: LanguageConfig): Pr
 
       // For recurse types (e.g. class_body), visit their children
       // to extract members at depth+1
-      for (const child of node.children) {
-        if (!child.isNamed) continue;
-        if (config.recurse.has(child.type)) {
-          for (const member of child.children) {
-            if (!member.isNamed) continue;
-            visit(member, depth + 1, false);
+      if (depth + 1 <= maxDepth) {
+        for (const child of node.children) {
+          if (!child.isNamed) continue;
+          if (config.recurse.has(child.type)) {
+            for (const member of child.children) {
+              if (!member.isNamed) continue;
+              visit(member, depth + 1, false);
+            }
           }
         }
       }

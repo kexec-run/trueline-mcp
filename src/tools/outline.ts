@@ -14,6 +14,7 @@ import { errorResult, textResult, type ToolResult } from "./types.ts";
 
 interface OutlineParams {
   file_path: string;
+  depth?: number;
   projectDir?: string;
   allowedDirs?: string[];
 }
@@ -41,7 +42,7 @@ export async function handleOutline(params: OutlineParams): Promise<ToolResult> 
   for (let i = 0; i < source.length; i++) if (source.charCodeAt(i) === 10) totalLines++;
 
   try {
-    const entries = await extractOutline(source, config);
+    const entries = await extractOutline(source, config, params.depth);
     if (entries.length === 0) {
       return textResult(`(no outline entries found in ${totalLines}-line file)`);
     }
