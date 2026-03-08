@@ -71,11 +71,14 @@ const allowedDirs = await resolveAllowedDirs();
 server.registerTool(
   "trueline_read",
   {
-    description: "Read a file; returns 'N:hash\tcontent' per line plus a checksum per range.",
+    description:
+      'Read a file. Requires file_path. Example: {"file_path": "src/main.ts", "ranges": ["10-25"]}. Returns per-line hashes and checksums for editing.',
     inputSchema: z.preprocess(
       coerceParams,
       z.object({
-        file_path: z.string().describe("Absolute or project-relative file path."),
+        file_path: z
+          .string({ required_error: "file_path is required" })
+          .describe("Absolute or project-relative file path."),
         ranges: z
           .array(z.string())
           .describe(
