@@ -54,8 +54,8 @@ describe("coerceParams", () => {
       expect(coerceParams({ file_paths: '["a.ts","b.ts"]' })).toEqual({ file_paths: ["a.ts", "b.ts"] });
     });
 
-    test("coerces stringified objects", () => {
-      expect(coerceParams({ ranges: '[{"start":1,"end":10}]' })).toEqual({ ranges: [{ start: 1, end: 10 }] });
+    test("coerces stringified string arrays", () => {
+      expect(coerceParams({ ranges: '["1-10","20-30"]' })).toEqual({ ranges: ["1-10", "20-30"] });
     });
 
     test("leaves invalid JSON strings as-is", () => {
@@ -78,40 +78,25 @@ describe("coerceParams", () => {
     });
   });
 
-  describe("range shorthand coercion", () => {
-    test('coerces "10:20" to {start: 10, end: 20}', () => {
-      expect(coerceParams({ ranges: ["10:20"] })).toEqual({ ranges: [{ start: 10, end: 20 }] });
+  describe("ranges pass-through", () => {
+    test("string ranges are passed through unchanged", () => {
+      expect(coerceParams({ ranges: ["10-20"] })).toEqual({ ranges: ["10-20"] });
     });
 
-    test('coerces "10-20" to {start: 10, end: 20}', () => {
-      expect(coerceParams({ ranges: ["10-20"] })).toEqual({ ranges: [{ start: 10, end: 20 }] });
+    test("single-line range string is passed through", () => {
+      expect(coerceParams({ ranges: ["10"] })).toEqual({ ranges: ["10"] });
     });
 
-    test('coerces "10..20" to {start: 10, end: 20}', () => {
-      expect(coerceParams({ ranges: ["10..20"] })).toEqual({ ranges: [{ start: 10, end: 20 }] });
-    });
-
-    test('coerces single number "10" to {start: 10}', () => {
-      expect(coerceParams({ ranges: ["10"] })).toEqual({ ranges: [{ start: 10 }] });
-    });
-
-    test("passes through object ranges unchanged", () => {
-      expect(coerceParams({ ranges: [{ start: 10, end: 20 }] })).toEqual({ ranges: [{ start: 10, end: 20 }] });
-    });
-
-    test("handles mixed string and object ranges", () => {
-      expect(coerceParams({ ranges: ["1:50", { start: 100, end: 200 }] })).toEqual({
-        ranges: [
-          { start: 1, end: 50 },
-          { start: 100, end: 200 },
-        ],
+    test("multiple range strings are passed through", () => {
+      expect(coerceParams({ ranges: ["1-50", "100-200"] })).toEqual({
+        ranges: ["1-50", "100-200"],
       });
     });
 
     test("realistic trueline_read call with string ranges", () => {
-      expect(coerceParams({ file_path: "src/server.ts", ranges: ["149:173"], hashes: "false" })).toEqual({
+      expect(coerceParams({ file_path: "src/server.ts", ranges: ["149-173"], hashes: "false" })).toEqual({
         file_path: "src/server.ts",
-        ranges: [{ start: 149, end: 173 }],
+        ranges: ["149-173"],
         hashes: false,
       });
     });

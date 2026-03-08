@@ -63,10 +63,7 @@ describe("trueline_verify", () => {
     // Read two non-adjacent ranges
     const readResult = await handleRead({
       file_path: file,
-      ranges: [
-        { start: 1, end: 5 },
-        { start: 10, end: 15 },
-      ],
+      ranges: ["1-5", "10-15"],
       projectDir: testDir,
     });
     const checksums = extractChecksums(getText(readResult));

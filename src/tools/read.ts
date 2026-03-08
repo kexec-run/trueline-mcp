@@ -27,15 +27,13 @@ interface ReadParams {
   file_path: string;
   encoding?: string;
   hashes?: boolean;
-  start_line?: number;
-  end_line?: number;
-  ranges?: Array<{ start?: number; end?: number }>;
+  ranges?: string[];
   projectDir?: string;
   allowedDirs?: string[];
 }
 
 export async function handleRead(params: ReadParams): Promise<ToolResult> {
-  const { file_path, start_line, end_line, projectDir, allowedDirs } = params;
+  const { file_path, projectDir, allowedDirs } = params;
   const includeHashes = params.hashes !== false;
 
   const validated = await validatePath(file_path, "Read", projectDir, allowedDirs);
@@ -50,23 +48,9 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   const { resolvedPath } = validated;
 
-  // Support both legacy start_line/end_line and new ranges param
   let ranges: ReadRange[];
   try {
-    if (params.ranges) {
-      ranges = parseRanges(params.ranges);
-    } else if (start_line !== undefined || end_line !== undefined) {
-      const start = start_line ?? 1;
-      if (start < 1) {
-        return errorResult(`start_line ${start} must be >= 1`);
-      }
-      if (end_line !== undefined && end_line < start) {
-        return errorResult(`end_line ${end_line} must be >= start_line ${start}`);
-      }
-      ranges = [{ start, end: end_line ?? Infinity }];
-    } else {
-      ranges = [{ start: 1, end: Infinity }];
-    }
+    ranges = parseRanges(params.ranges);
   } catch (err: unknown) {
     return errorResult((err as Error).message);
   }

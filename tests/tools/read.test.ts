@@ -55,11 +55,10 @@ describe("handleRead", () => {
     expect(text).toContain("checksum:");
   });
 
-  test("supports start_line and end_line", async () => {
+  test("supports ranges param", async () => {
     const result = await handleRead({
       file_path: testFile,
-      start_line: 2,
-      end_line: 2,
+      ranges: ["2"],
       projectDir: testDir,
     });
     const text = result.content[0].text;
@@ -92,10 +91,7 @@ describe("handleRead", () => {
 
     const result = await handleRead({
       file_path: multiFile,
-      ranges: [
-        { start: 3, end: 5 },
-        { start: 15, end: 17 },
-      ],
+      ranges: ["3-5", "15-17"],
       projectDir: testDir,
     });
 
@@ -133,10 +129,7 @@ describe("handleRead", () => {
     writeFileSync(overlapFile, "a\nb\nc\nd\n");
     const result = await handleRead({
       file_path: overlapFile,
-      ranges: [
-        { start: 1, end: 3 },
-        { start: 2, end: 4 },
-      ],
+      ranges: ["1-3", "2-4"],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();
@@ -190,7 +183,7 @@ describe("handleRead", () => {
     const bigFile = join(testDir, "big.ts");
     const result = await handleRead({
       file_path: bigFile,
-      ranges: [{ start: 100, end: 199 }],
+      ranges: ["100-199"],
       allowedDirs: [testDir],
     });
     expect(result.isError).toBeUndefined();
@@ -220,7 +213,7 @@ describe("handleRead", () => {
     const result = await handleRead({
       file_path: testFile,
       hashes: false,
-      ranges: [{ start: 1, end: 2 }],
+      ranges: ["1-2"],
       projectDir: testDir,
     });
     expect(result.isError).toBeUndefined();

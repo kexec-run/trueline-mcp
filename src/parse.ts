@@ -154,30 +154,50 @@ export interface ReadRange {
   end: number;
 }
 
-interface RangeInput {
-  start?: number;
-  end?: number;
-}
-
 /**
  * Parse and validate the `ranges` input for trueline_read.
  *
+ * Accepts string ranges like "10-20", "10" (single line), or "10-" (to EOF).
  * Returns a sorted, non-overlapping array of ranges. Undefined or empty
  * input returns a single whole-file range.
  */
-export function parseRanges(ranges: RangeInput[] | undefined): ReadRange[] {
+export function parseRanges(ranges: string[] | undefined): ReadRange[] {
   if (!ranges || ranges.length === 0) {
     return [{ start: 1, end: Infinity }];
   }
 
   const parsed: ReadRange[] = ranges.map((r) => {
-    const start = r.start ?? 1;
-    const end = r.end ?? Infinity;
-    if (start < 1) {
-      throw new Error(`Invalid range: start ${start} must be >= 1`);
+    const dashIdx = r.indexOf("-");
+
+    let start: number;
+    let end: number;
+
+    if (dashIdx === -1) {
+      // "10" — single line
+      start = Number(r);
+      end = start;
+    } else if (dashIdx === 0) {
+      // "-20" — from start to line 20
+      start = 1;
+      end = Number(r.slice(1));
+    } else if (dashIdx === r.length - 1) {
+      // "10-" — from line 10 to EOF
+      start = Number(r.slice(0, -1));
+      end = Infinity;
+    } else {
+      // "10-20" — explicit range
+      start = Number(r.slice(0, dashIdx));
+      end = Number(r.slice(dashIdx + 1));
+    }
+
+    if (!Number.isInteger(start) || start < 1) {
+      throw new Error(`Invalid range "${r}": start must be a positive integer`);
+    }
+    if (end !== Infinity && (!Number.isInteger(end) || end < 1)) {
+      throw new Error(`Invalid range "${r}": end must be a positive integer`);
     }
     if (start > end) {
-      throw new Error(`Invalid range: start ${start} must be <= end ${end}`);
+      throw new Error(`Invalid range "${r}": start ${start} must be <= end ${end}`);
     }
     return { start, end };
   });

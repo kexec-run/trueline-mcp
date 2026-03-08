@@ -214,71 +214,71 @@ describe("binary detection", () => {
     expect(result.content[0].text).toContain("binary");
   });
 
-  test("null byte beyond start_line range is still detected", async () => {
+  test("null byte beyond range start is still detected", async () => {
     const f = join(testDir, "null-in-range.bin");
     writeFileSync(f, "ok\nok\nbad\x00line\n");
 
-    const result = await handleRead({ file_path: f, start_line: 3, projectDir: testDir });
+    const result = await handleRead({ file_path: f, ranges: ["3-"], projectDir: testDir });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("binary");
   });
 });
 
 // =============================================================================
-// start_line / end_line range handling
+// Range parameter handling
 // =============================================================================
 
 describe("range parameters", () => {
-  test("start_line = 0 is rejected", async () => {
+  test("start = 0 is rejected", async () => {
     const f = join(testDir, "range.txt");
     writeFileSync(f, "aaa\nbbb\n");
 
-    const result = await handleRead({ file_path: f, start_line: 0, projectDir: testDir });
+    const result = await handleRead({ file_path: f, ranges: ["0-10"], projectDir: testDir });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("must be >= 1");
+    expect(result.content[0].text).toContain("start");
   });
 
-  test("negative start_line is rejected", async () => {
+  test("non-numeric range is rejected", async () => {
     const f = join(testDir, "range-neg.txt");
     writeFileSync(f, "aaa\nbbb\n");
 
-    const result = await handleRead({ file_path: f, start_line: -1, projectDir: testDir });
+    const result = await handleRead({ file_path: f, ranges: ["abc"], projectDir: testDir });
     expect(result.isError).toBe(true);
   });
 
-  test("start_line beyond file length returns error", async () => {
+  test("start beyond file length returns error", async () => {
     const f = join(testDir, "range-beyond.txt");
     writeFileSync(f, "aaa\nbbb\n");
 
-    const result = await handleRead({ file_path: f, start_line: 100, projectDir: testDir });
+    const result = await handleRead({ file_path: f, ranges: ["100-"], projectDir: testDir });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("out of range");
   });
 
-  test("end_line < start_line is rejected", async () => {
+  test("start > end is rejected", async () => {
     const f = join(testDir, "range-backwards.txt");
     writeFileSync(f, "aaa\nbbb\nccc\n");
 
-    const result = await handleRead({ file_path: f, start_line: 3, end_line: 1, projectDir: testDir });
+    const result = await handleRead({ file_path: f, ranges: ["3-1"], projectDir: testDir });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("must be >= start_line");
+    expect(result.content[0].text).toContain("start");
   });
 
-  test("end_line beyond file length silently clamps", async () => {
+  test("end beyond file length silently clamps", async () => {
     const f = join(testDir, "range-overshoot.txt");
     writeFileSync(f, "aaa\nbbb\n");
 
-    const result = await handleRead({ file_path: f, start_line: 1, end_line: 999, projectDir: testDir });
+    const result = await handleRead({ file_path: f, ranges: ["1-999"], projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(2);
   });
 
-  test("start_line = end_line reads exactly one line", async () => {
+  test("single-line range reads exactly one line", async () => {
     const f = join(testDir, "range-single.txt");
     writeFileSync(f, "aaa\nbbb\nccc\n");
 
-    const result = await handleRead({ file_path: f, start_line: 2, end_line: 2, projectDir: testDir });
+    const result = await handleRead({ file_path: f, ranges: ["2"], projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
     expect(lines).toHaveLength(1);
@@ -290,7 +290,7 @@ describe("range parameters", () => {
     const fileLines = ["aaa", "bbb", "ccc", "ddd", "eee"];
     writeFileSync(f, `${fileLines.join("\n")}\n`);
 
-    const result = await handleRead({ file_path: f, start_line: 2, end_line: 4, projectDir: testDir });
+    const result = await handleRead({ file_path: f, ranges: ["2-4"], projectDir: testDir });
     expect(result.isError).toBeUndefined();
 
     const expectedCs = rangeChecksum(fileLines, 2, 4);

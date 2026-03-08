@@ -77,14 +77,9 @@ server.registerTool(
       z.object({
         file_path: z.string().describe("Absolute or project-relative file path."),
         ranges: z
-          .array(
-            z.object({
-              start: z.number().int().positive().describe("First line to read (1-based).").optional(),
-              end: z.number().int().positive().describe("Last line to read (1-based, inclusive).").optional(),
-            }),
-          )
+          .array(z.string())
           .describe(
-            "Line ranges to read. Omit to read the whole file. Example: [{start: 10, end: 25}] or [{start: 1, end: 50}, {start: 200, end: 220}] for disjoint ranges. Each range gets its own checksum.",
+            'Line ranges to read. Omit to read the whole file. Examples: ["10-25"], ["1-50", "200-220"], ["10"] (single line), ["10-"] (to EOF). Each range gets its own checksum.',
           )
           .optional(),
         encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
