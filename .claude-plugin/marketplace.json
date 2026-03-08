@@ -8,10 +8,7 @@
   "plugins": [
     {
       "name": "trueline-mcp",
-      "source": {
-        "source": "github",
-        "repo": "rjkaes/trueline-mcp"
-      },
+      "source": "./",
       "description": "Truth-verified file editing for Claude Code agents",
       "keywords": [
         "mcp",
