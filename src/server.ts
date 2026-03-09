@@ -101,8 +101,8 @@ server.registerTool(
   "trueline_edit",
   {
     description:
-      "Apply hash-verified edits to a file. Each edit needs both a checksum and a range in hash.line format. " +
-      'Example edit: {range: "ab.10-cd.20", checksum: "8-25:f7e2abcd", content: "new text"}. ' +
+      "Apply hash-verified edits to a file. Edits go in the edits array. " +
+      'Example: {file_path: "foo.ts", edits: [{range: "ab.10-cd.20", checksum: "8-25:f7e2abcd", content: "new text"}]}. ' +
       "Copy the 2-letter hash prefix (ab, cd, ...) from trueline_read/trueline_search output.",
     inputSchema: z.preprocess(
       coerceParams,
