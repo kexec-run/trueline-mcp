@@ -88,7 +88,7 @@ export function getInstructions(platform = "claude-code") {
   <tips>
     <tip>Use ${p.writeTool} to create new files. To edit them afterward, use trueline_read or trueline_search to get checksums first.</tip>
     <tip>When you need to find a pattern across many files, ${p.grepAdvice}, then use trueline_search on individual files you need to edit.</tip>
-    <tip>Batch multiple edits to the same file into one trueline_edit call. Each edit carries its own checksum \u2014 they don't need to share one.</tip>${atRefTip}
+    <tip>Batch multiple edits to the same file into one trueline_edit call. Each edit needs the checksum whose line range covers that edit's target lines — don't reuse a checksum from one region for an edit in a different region.</tip>${atRefTip}
   </tips>
 </trueline_mcp_instructions>`;
 }
