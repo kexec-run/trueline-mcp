@@ -8,13 +8,21 @@ describe("getInstructions", () => {
     expect(out).toContain("</trueline_mcp_instructions>");
   });
 
-  test("documents all five trueline tools", () => {
+  test("documents all six trueline tools", () => {
     const out = getInstructions();
     expect(out).toContain("trueline_read");
     expect(out).toContain("trueline_edit");
     expect(out).toContain("trueline_diff");
     expect(out).toContain("trueline_outline");
     expect(out).toContain("trueline_search");
+    expect(out).toContain("trueline_verify");
+  });
+
+  test("includes the three routing paths", () => {
+    const out = getInstructions();
+    expect(out).toContain("small-file");
+    expect(out).toContain("surgical");
+    expect(out).toContain("exploratory");
   });
 
   test("includes a workflow element", () => {
@@ -22,14 +30,16 @@ describe("getInstructions", () => {
     expect(out).toContain("<workflow>");
   });
 
-  test("instructs agent that Edit is blocked", () => {
+  test("does not claim tools are blocked", () => {
     const out = getInstructions();
-    expect(out).toContain("blocked");
+    expect(out).not.toContain("blocked");
+    expect(out).not.toContain("rejected");
+    expect(out).not.toContain("Never use");
   });
 
   test("mentions checksum from trueline_read", () => {
     const out = getInstructions();
-    expect(out).toContain("checksum from trueline_read");
+    expect(out).toContain("checksum");
   });
 
   test("getSessionStartInstructions is a backwards-compatible alias", () => {
