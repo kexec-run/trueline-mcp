@@ -18,11 +18,19 @@ describe("getInstructions", () => {
     expect(out).toContain("trueline_verify");
   });
 
-  test("includes the three routing paths", () => {
+  test("has exploration rules for outline and diff", () => {
     const out = getInstructions();
-    expect(out).toContain("small-file");
+    expect(out).toContain("<exploration>");
+    expect(out).toContain("trueline_outline instead of");
+    expect(out).toContain("trueline_diff");
+  });
+
+  test("has editing paths: surgical, exploratory, small-edit", () => {
+    const out = getInstructions();
+    expect(out).toContain("<editing>");
     expect(out).toContain("surgical");
     expect(out).toContain("exploratory");
+    expect(out).toContain("small-edit");
   });
 
   test("includes a workflow element", () => {
