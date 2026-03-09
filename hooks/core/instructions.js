@@ -70,9 +70,9 @@ export function getInstructions(platform = "claude-code") {
     <tool name="trueline_verify">Check if held checksums are still valid. Cheaper than re-reading.</tool>
   </tools>
   <routing>
-    <path name="small-file">For small files or simple configs: use ${p.readTool} and ${p.editTool} directly. No need for trueline.</path>
-    <path name="surgical">For large files when you know the target (a function name, variable, string): use trueline_search to find lines with verification hashes, then trueline_edit to replace them. Skip outline/read unless you lack context.</path>
-    <path name="exploratory">For large files when you need to understand structure first: use trueline_outline to get a lightweight map, then trueline_read with targeted line ranges (set hashes=false if you are only reading, not editing). Once you locate what to change, use trueline_read (with hashes) or trueline_search, then trueline_edit.</path>
+    <path name="surgical" default="true">When you know the target (a function name, variable, string): use trueline_search to find lines with verification hashes, then trueline_edit. This is the fastest path and guarantees edits land on the right content. Skip outline/read unless you lack context.</path>
+    <path name="exploratory">When you need to understand structure first: use trueline_outline to get a lightweight map, then trueline_read with targeted line ranges (set hashes=false if you are only reading, not editing). Once you locate what to change, use trueline_search or trueline_read (with hashes), then trueline_edit.</path>
+    <path name="small-file">For files under ~200 lines, simple configs, or one-line lookups: ${p.readTool} and ${p.editTool} are fine. The MCP overhead of trueline tools outweighs the savings on small files.</path>
   </routing>
   <workflow>trueline_search \u2192 trueline_edit (fastest edit path, no read needed)</workflow>
   <workflow>trueline_outline \u2192 trueline_read (targeted ranges) \u2192 trueline_edit</workflow>

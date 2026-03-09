@@ -121,8 +121,8 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
       action: "advise",
       reason:
         `<trueline_advisory>This file is ${size}. ` +
-        "Consider trueline_outline for structure, or trueline_read with targeted ranges " +
-        "to avoid loading the entire file into context.</trueline_advisory>",
+        "Use trueline_outline for structure, or trueline_read with targeted line ranges. " +
+        "Reading the full file wastes context on lines you don't need.</trueline_advisory>",
     };
   }
 
@@ -131,7 +131,8 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
     action: "advise",
     reason:
       `<trueline_advisory>This file is ${size}. ` +
-      "Consider trueline_search \u2192 trueline_edit for targeted changes, " +
-      "or trueline_outline to explore structure first.</trueline_advisory>",
+      "Use trueline_search \u2192 trueline_edit for verified changes. " +
+      "Built-in Edit on large files risks stale-content matches; " +
+      "trueline_edit verifies hashes before writing.</trueline_advisory>",
   };
 }
