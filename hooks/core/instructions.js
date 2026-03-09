@@ -64,9 +64,9 @@ export function getInstructions(platform = "claude-code") {
   <tools>
     <tool name="trueline_outline">Structural outline of one or more files. Returns functions, classes, and declarations with line ranges. Always cheaper than reading the full file.</tool>
     <tool name="trueline_diff">Semantic AST-based diff vs a git ref. Pass all files in one call via file_paths; use ["*"] for all changed files. No built-in equivalent.</tool>
-    <tool name="trueline_read">Read files with per-line hashes. Pass hashes=false when you only need to understand code, not edit it.</tool>
+    <tool name="trueline_read">Read files with checksums for editing. Use trueline_outline instead when you only need to understand structure.</tool>
     <tool name="trueline_edit">Hash-verified edits. Needs checksum from trueline_read or trueline_search. Pass dry_run=true to preview as unified diff.</tool>
-    <tool name="trueline_search">Literal string search with hashes \u2014 returns edit-ready results. Set regex=true for regex. Use for single-file searches when you plan to edit the matches.</tool>
+    <tool name="trueline_search">Literal string search with verification checksums \u2014 returns edit-ready results. Set regex=true for regex. Use for single-file searches when you plan to edit the matches.</tool>
     <tool name="trueline_verify">Check if held checksums are still valid. Cheaper than re-reading.</tool>
   </tools>
   <exploration>
@@ -76,7 +76,7 @@ export function getInstructions(platform = "claude-code") {
   </exploration>
   <editing>
     <path name="surgical" default="true">When you know the target (a function name, variable, string): use trueline_search to find lines with verification hashes, then trueline_edit. This is the fastest path and guarantees edits land on the right content.</path>
-    <path name="exploratory">When you need context first: trueline_outline \u2192 trueline_read (targeted ranges, hashes=false) to understand, then trueline_search or trueline_read (with hashes) \u2192 trueline_edit.</path>
+    <path name="exploratory">When you need context first: trueline_outline \u2192 trueline_read (targeted ranges) to understand, then trueline_search or trueline_read \u2192 trueline_edit.</path>
     <path name="small-edit">For files under ~200 lines or trivial one-line changes: ${p.readTool} and ${p.editTool} are fine. The MCP round-trip overhead outweighs hash verification savings on small files.</path>
   </editing>
   <workflow>trueline_outline \u2192 understand structure (any file, any size)</workflow>

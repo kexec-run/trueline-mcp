@@ -31,15 +31,18 @@ before any bytes hit disk.
 `trueline_read` returns each line in this format:
 
 ```
-{lineNumber}:{hash}|{content}
+{hash}.{lineNumber}	{content}
 ```
+
+The separator between `{hash}.{lineNumber}` and `{content}` is a tab
+character.
 
 For example, reading a three-line file:
 
 ```
-1:ab|#!/usr/bin/env node
-2:mp|import { readFile } from "fs/promises";
-3:qk|console.log("hello");
+ab.1	#!/usr/bin/env node
+mp.2	import { readFile } from "fs/promises";
+qk.3	console.log("hello");
 
 checksum: 1-3:f7e2a1b0
 ```
@@ -92,14 +95,7 @@ Multiple disjoint ranges can be read in a single call, each producing
 its own checksum. This is useful when editing lines in different parts
 of a file — one read call provides all the checksums needed.
 
-### Compact reads
-
-When the agent is exploring code without planning to edit, it can pass
-`hashes: false` to omit the per-line 2-letter hashes. The output format
-changes from `N:hash\tcontent` to `N\tcontent`, saving ~3 tokens per line.
-Checksums are always included regardless of the `hashes` setting, so the
-agent can still reference the output for a subsequent targeted re-read
-before editing.
+### Empty files
 
 ### Empty files
 
@@ -114,7 +110,7 @@ trueline_edit({
   file_path: "src/main.ts",
   edits: [{
     checksum: "10-25:f7e2a1b0",
-    range: "12:mp..14:qk",
+    range: "mp.12-qk.14",
     content: "  const x = 1;\n  const y = 2;",
   }]
 })
@@ -122,10 +118,10 @@ trueline_edit({
 
 Each edit specifies:
 
-- **`range`** — which lines to replace, as `startLine:hash..endLine:hash`.
-  A single-line shorthand `12:mp` is equivalent to `12:mp..12:mp`.
-  Prefix `+` for insert-after: `+5:ab` inserts content after line 5.
-  Use `+0:` to prepend to the file.
+- **`range`** — which lines to replace, as `hash.startLine-hash.endLine`.
+  A single-line shorthand `mp.12` is equivalent to `mp.12-mp.12`.
+  Prefix `+` for insert-after: `+ab.5` inserts content after line 5.
+  Use `+0` to prepend to the file.
 - **`content`** — the replacement lines as a single newline-separated
   string. The resulting lines can be fewer or more than the range
   (shrinking or growing the file). An empty string deletes the range.
@@ -395,7 +391,7 @@ The pipeline:
 If `max_matches` is exceeded, the output includes a truncation notice
 with the total match count.
 
-The output is identical in format to `trueline_read` — same `N:hash\t`
+The output is identical in format to `trueline_read` — same `hash.N\t`
 prefix, same checksums — so the agent can pass results directly to
 `trueline_edit` without a re-read step.
 
@@ -469,7 +465,7 @@ round-trip.
 
 The 32-bit per-line hash is projected into two characters from a
 32-symbol alphabet (`a-z` plus `2-7`, 1024 combinations) for the
-`N:xy|content` display format:
+`xy.N\tcontent` display format:
 
 ```
 c1 = HASH_CHARS[hash & 0x1f]          // bits 0-4
