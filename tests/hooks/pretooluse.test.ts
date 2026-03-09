@@ -29,50 +29,23 @@ afterAll(() => {
   rmSync(projectDir, { recursive: true, force: true });
 });
 
-describe("PreToolUse hook — advisory routing", () => {
-  test("silently approves Read for small files", async () => {
+describe("PreToolUse hook — Read routing", () => {
+  test("advises outline for small files", async () => {
     const result = await processHookEvent({
       tool_name: "Read",
       tool_input: { file_path: smallFile },
     });
     expect(result.decision).toBe("approve");
-    expect(result.reason).toBeUndefined();
+    expect(result.reason).toContain("trueline_outline");
   });
 
-  test("silently approves Edit for small files", async () => {
-    const result = await processHookEvent({
-      tool_name: "Edit",
-      tool_input: { file_path: smallFile, old_string: "x", new_string: "y" },
-    });
-    expect(result.decision).toBe("approve");
-    expect(result.reason).toBeUndefined();
-  });
-
-  test("advises trueline for Read on large files", async () => {
+  test("blocks Read on large files", async () => {
     const result = await processHookEvent({
       tool_name: "Read",
       tool_input: { file_path: largeFile },
     });
-    expect(result.decision).toBe("approve");
-    expect(result.reason).toContain("trueline");
-  });
-
-  test("advises trueline for Edit on large files", async () => {
-    const result = await processHookEvent({
-      tool_name: "Edit",
-      tool_input: { file_path: largeFile, old_string: "x", new_string: "y" },
-    });
-    expect(result.decision).toBe("approve");
-    expect(result.reason).toContain("trueline");
-  });
-
-  test("advises trueline for MultiEdit on large files", async () => {
-    const result = await processHookEvent({
-      tool_name: "MultiEdit",
-      tool_input: { file_path: largeFile, edits: [] },
-    });
-    expect(result.decision).toBe("approve");
-    expect(result.reason).toContain("trueline");
+    expect(result.decision).toBe("block");
+    expect(result.reason).toContain("trueline_read");
   });
 
   test("approves Read for files outside project", async () => {
@@ -91,6 +64,35 @@ describe("PreToolUse hook — advisory routing", () => {
     });
     expect(result.decision).toBe("approve");
     expect(result.reason).toBeUndefined();
+  });
+});
+
+describe("PreToolUse hook — Edit routing", () => {
+  test("silently approves Edit for small files", async () => {
+    const result = await processHookEvent({
+      tool_name: "Edit",
+      tool_input: { file_path: smallFile, old_string: "x", new_string: "y" },
+    });
+    expect(result.decision).toBe("approve");
+    expect(result.reason).toBeUndefined();
+  });
+
+  test("advises trueline for Edit on large files", async () => {
+    const result = await processHookEvent({
+      tool_name: "Edit",
+      tool_input: { file_path: largeFile, old_string: "x", new_string: "y" },
+    });
+    expect(result.decision).toBe("approve");
+    expect(result.reason).toContain("trueline");
+  });
+
+  test("advises trueline for MultiEdit on large files", async () => {
+    const result = await processHookEvent({
+      tool_name: "MultiEdit",
+      tool_input: { file_path: largeFile, edits: [] },
+    });
+    expect(result.decision).toBe("approve");
+    expect(result.reason).toContain("trueline");
   });
 
   test("approves Edit for files outside project", async () => {
@@ -146,7 +148,9 @@ describe("PreToolUse hook — advisory routing", () => {
       rmSync(claudeDir, { recursive: true, force: true });
     }
   });
+});
 
+describe("PreToolUse hook — other tools", () => {
   test("approves other tools unconditionally", async () => {
     for (const tool of ["Bash", "Glob"]) {
       const result = await processHookEvent({ tool_name: tool, tool_input: {} });

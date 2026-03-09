@@ -63,23 +63,30 @@ function formatSize(bytes) {
 }
 
 /**
- * Route a pre-tool-use event. Returns an advisory decision or null for
- * silent passthrough.
+ * Route a pre-tool-use event.
  *
- * Advisory logic:
- * 1. Only intercepts Read, Edit, MultiEdit (canonical names).
- * 2. Requires a file path in the tool input.
- * 3. File must exist and be statable.
- * 4. Trueline must be able to access the file (canAccessFn).
- * 5. File must be >= LARGE_FILE_THRESHOLD bytes.
+ * Routing logic by tool and file size:
  *
- * If all conditions pass, returns { action: "advise", reason } suggesting
- * trueline tools. Otherwise returns null (silent approve).
+ * - Read, large file (>= LARGE_FILE_THRESHOLD): **block** and redirect
+ *   to trueline_read. Full reads of large files waste context; the agent
+ *   should use trueline_outline or targeted trueline_read ranges instead.
+ *
+ * - Read, small file: **advise** trueline_outline but allow through.
+ *   The MCP overhead of trueline_read isn't worth it on small files,
+ *   but outline is still a better first step.
+ *
+ * - Edit/MultiEdit, large file: **advise** trueline_search -> trueline_edit.
+ *   We don't block because the agent may have already committed to an
+ *   edit workflow; blocking mid-edit is more disruptive than a read redirect.
+ *
+ * - Edit/MultiEdit, small file: **pass through** silently.
+ *
+ * Returns null for silent approve, or { action, reason } for advise/block.
  *
  * @param {string} toolName - Raw tool name from the platform
  * @param {Record<string, unknown> | undefined} toolInput
  * @param {(filePath: string, toolName: string) => Promise<boolean>} canAccessFn
- * @returns {Promise<{ action: "advise"; reason: string } | null>}
+ * @returns {Promise<{ action: "advise" | "block"; reason: string } | null>}
  */
 export async function routePreToolUse(toolName, toolInput, canAccessFn) {
   const canonical = canonicalToolName(toolName);
@@ -101,32 +108,40 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
     return null;
   }
 
-  // Small files: let built-in tools handle them.
-  if (fileSize < LARGE_FILE_THRESHOLD) return null;
-
-  // Check if trueline can access this file. For Edit/MultiEdit, check
-  // both read and write access; for Read, only read access.
-  if (canonical === "Edit" || canonical === "MultiEdit") {
-    const [canRead, canWrite] = await Promise.all([canAccessFn(filePath, "Read"), canAccessFn(filePath, "Edit")]);
-    if (!canRead || !canWrite) return null;
-  } else {
+  if (canonical === "Read") {
     const canRead = await canAccessFn(filePath, "Read");
     if (!canRead) return null;
-  }
 
-  const size = formatSize(fileSize);
+    const size = formatSize(fileSize);
 
-  if (canonical === "Read") {
+    // Large files: block and redirect to trueline.
+    if (fileSize >= LARGE_FILE_THRESHOLD) {
+      return {
+        action: "block",
+        reason:
+          `<trueline_redirect>This file is ${size}. ` +
+          "Use trueline_outline for structure, or trueline_read with targeted line ranges " +
+          "to avoid loading the entire file into context.</trueline_redirect>",
+      };
+    }
+
+    // Small files: advise outline but let the read through.
     return {
       action: "advise",
       reason:
-        `<trueline_advisory>This file is ${size}. ` +
-        "Use trueline_outline for structure, or trueline_read with targeted line ranges. " +
-        "Reading the full file wastes context on lines you don't need.</trueline_advisory>",
+        "<trueline_advisory>trueline_outline gives a compact structural map " +
+        "and is often enough on its own. Use it before reading full files.</trueline_advisory>",
     };
   }
 
-  // Edit or MultiEdit
+  // Edit or MultiEdit: only advise on large files.
+  if (fileSize < LARGE_FILE_THRESHOLD) return null;
+
+  const [canRead, canWrite] = await Promise.all([canAccessFn(filePath, "Read"), canAccessFn(filePath, "Edit")]);
+  if (!canRead || !canWrite) return null;
+
+  const size = formatSize(fileSize);
+
   return {
     action: "advise",
     reason:
