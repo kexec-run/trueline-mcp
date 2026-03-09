@@ -38,7 +38,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("a.txt", "aaa\nbbb\nccc\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `2:${lineHash("bbb")}`, content: "xxx\nyyy\nzzz" }],
+      edits: [{ checksum: cs, range: `${lineHash("bbb")}.2`, content: "xxx\nyyy\nzzz" }],
     });
 
     const text = result.content[0].text;
@@ -51,7 +51,7 @@ describe("edit summary", () => {
     const h4 = lineHash("ddd");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `2:${h2}-4:${h4}`, content: "xxx" }],
+      edits: [{ checksum: cs, range: `${h2}.2-${h4}.4`, content: "xxx" }],
     });
 
     const text = result.content[0].text;
@@ -62,7 +62,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("c.txt", "aaa\nbbb\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `1:${lineHash("aaa")}`, content: "xxx" }],
+      edits: [{ checksum: cs, range: `${lineHash("aaa")}.1`, content: "xxx" }],
     });
 
     const text = result.content[0].text;
@@ -75,7 +75,7 @@ describe("edit summary", () => {
     const h2 = lineHash("bbb");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `1:${h1}-2:${h2}`, content: "" }],
+      edits: [{ checksum: cs, range: `${h1}.1-${h2}.2`, content: "" }],
     });
 
     const text = result.content[0].text;
@@ -86,7 +86,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("e.txt", "aaa\nbbb\nccc\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `2:${lineHash("bbb")}`, content: "" }],
+      edits: [{ checksum: cs, range: `${lineHash("bbb")}.2`, content: "" }],
     });
 
     const text = result.content[0].text;
@@ -97,7 +97,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("f.txt", "aaa\nbbb\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `+1:${lineHash("aaa")}`, content: "xxx\nyyy\nzzz" }],
+      edits: [{ checksum: cs, range: `+${lineHash("aaa")}.1`, content: "xxx\nyyy\nzzz" }],
     });
 
     const text = result.content[0].text;
@@ -108,7 +108,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("g.txt", "aaa\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: "+0:", content: "xxx\nyyy" }],
+      edits: [{ checksum: cs, range: "+0", content: "xxx\nyyy" }],
     });
 
     const text = result.content[0].text;
@@ -119,7 +119,7 @@ describe("edit summary", () => {
     const { path, cs } = setupFile("h.txt", "aaa\nbbb\n");
     const result = await edit({
       file_path: path,
-      edits: [{ checksum: cs, range: `1:${lineHash("aaa")}`, content: "aaa" }],
+      edits: [{ checksum: cs, range: `${lineHash("aaa")}.1`, content: "aaa" }],
     });
 
     const text = result.content[0].text;
@@ -134,8 +134,8 @@ describe("edit summary", () => {
     const result = await edit({
       file_path: path,
       edits: [
-        { checksum: cs, range: `1:${h1}`, content: "xxx" },
-        { checksum: cs, range: `+3:${h3}`, content: "yyy" },
+        { checksum: cs, range: `${h1}.1`, content: "xxx" },
+        { checksum: cs, range: `+${h3}.3`, content: "yyy" },
       ],
     });
 

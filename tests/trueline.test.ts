@@ -72,37 +72,37 @@ describe("rangeChecksum", () => {
 
 describe("parseRange", () => {
   test("parses valid range", () => {
-    const r = parseRange("12:gh-21:yz");
+    const r = parseRange("gh.12-yz.21");
     expect(r.start).toEqual({ line: 12, hash: "gh" });
     expect(r.end).toEqual({ line: 21, hash: "yz" });
   });
 
   test("parses single-line range", () => {
-    const r = parseRange("5:ab-5:ab");
+    const r = parseRange("ab.5-ab.5");
     expect(r.start.line).toBe(5);
     expect(r.end.line).toBe(5);
   });
 
-  test("parses single line:hash as self-range", () => {
-    const r = parseRange("5:ab");
+  test("parses single hash.line as self-range", () => {
+    const r = parseRange("ab.5");
     expect(r.start).toEqual({ line: 5, hash: "ab" });
     expect(r.end).toEqual({ line: 5, hash: "ab" });
   });
 
   test("single-line shorthand returns independent start/end objects", () => {
-    const r = parseRange("5:ab");
+    const r = parseRange("ab.5");
     expect(r.start).toEqual(r.end);
     expect(r.start).not.toBe(r.end); // must be distinct objects
   });
 
   test("parses dash-separated range", () => {
-    const r = parseRange("12:gh-21:yz");
+    const r = parseRange("gh.12-yz.21");
     expect(r.start).toEqual({ line: 12, hash: "gh" });
     expect(r.end).toEqual({ line: 21, hash: "yz" });
   });
 
   test("throws when start > end", () => {
-    expect(() => parseRange("21:ab-12:cd")).toThrow("must be ≤");
+    expect(() => parseRange("ab.21-cd.12")).toThrow("must be ≤");
   });
 });
 

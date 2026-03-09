@@ -73,9 +73,7 @@ overhead, so the break-even point is roughly 15KB; below that, a plain
 | 245 lines   | 245 tokens | 14 tokens | 94% |
 | 504 lines   | 504 tokens | 4 tokens  | 99% |
 
-`trueline_read` supports multiple disjoint ranges in a single call and
-an optional `hashes: false` mode for exploratory reads that saves ~3
-tokens per line.
+`trueline_read` supports multiple disjoint ranges in a single call.
 
 ### Find and fix: `trueline_search`
 
