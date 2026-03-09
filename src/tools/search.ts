@@ -200,7 +200,13 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   }
 
   if (totalMatches === 0) {
-    return textResult(`No matches for pattern "${pattern}" in ${file_path}`);
+    let msg = `No matches for pattern "${pattern}" in ${file_path}`;
+    // Hint when the pattern looks like a regex but was searched literally
+    if (!params.regex && /[.*+?^${}()|[\]\\]/.test(pattern)) {
+      msg +=
+        "\n\n(hint: pattern contains regex metacharacters but was searched literally — add regex=true for regex matching)";
+    }
+    return textResult(msg);
   }
 
   // ===========================================================================
