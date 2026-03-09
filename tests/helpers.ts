@@ -46,3 +46,19 @@ export function rawLineHash(buf: Buffer): string {
   const h = fnv1aHashBytes(buf, 0, buf.length);
   return hashToLetters(h);
 }
+
+/**
+ * Build a `hash.line` reference for use in edit ranges.
+ *
+ * Mirrors the output format of trueline_read: `ab.12` where `ab` is the
+ * 2-letter content hash and `12` is the line number.
+ */
+export function hashDotLine(line: string, lineNumber: number): string {
+  return `${lineHash(line)}.${lineNumber}`;
+}
+
+/**
+ * Regex that matches the new `hash.line\tcontent` output format from
+ * trueline_read / trueline_search.
+ */
+export const LINE_PATTERN = /^[a-z]{2}\.\d+\t/;

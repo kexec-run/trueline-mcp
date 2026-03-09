@@ -88,12 +88,6 @@ server.registerTool(
           )
           .optional(),
         encoding: z.string().describe("File encoding. Defaults to utf-8. Supported: utf-8, ascii, latin1.").optional(),
-        hashes: z
-          .boolean()
-          .describe(
-            "Include per-line hashes in output. Defaults to true. Set to false for exploratory reads where you don't plan to edit — saves tokens. Checksums are always included.",
-          )
-          .optional(),
       }),
     ),
   },
@@ -123,7 +117,7 @@ server.registerTool(
                 .describe(
                   "Checksum from trueline_read or trueline_search whose line range covers this edit's target lines",
                 ),
-              range: z.string().describe("startLine:hash-endLine:hash or startLine:hash; prefix + for insert-after"),
+              range: z.string().describe("hash.startLine-hash.endLine or hash.line; prefix + for insert-after"),
 
               content: z.string().describe("Replacement lines, newline-separated. Empty string to delete."),
             }),

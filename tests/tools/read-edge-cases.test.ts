@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { handleRead } from "../../src/tools/read.ts";
 import { EMPTY_FILE_CHECKSUM } from "../../src/hash.ts";
-import { rangeChecksum } from "../helpers.ts";
+import { rangeChecksum, LINE_PATTERN } from "../helpers.ts";
 
 let testDir: string;
 
@@ -38,9 +38,9 @@ describe("empty and minimal files", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\thello$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}\.1\thello$/);
   });
 
   test("single line without trailing newline", async () => {
@@ -50,9 +50,9 @@ describe("empty and minimal files", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\thello$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}\.1\thello$/);
   });
 
   test("file with only a newline is one empty-string line", async () => {
@@ -62,10 +62,10 @@ describe("empty and minimal files", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(1);
     // The line content is empty — so it should be "1:XX|" with nothing after the pipe
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\t$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}\.1\t$/);
   });
 
   test("file with multiple blank lines", async () => {
@@ -75,7 +75,7 @@ describe("empty and minimal files", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(3);
   });
 });
@@ -92,11 +92,11 @@ describe("line endings", () => {
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
-    const lines = text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\taaa$/);
-    expect(lines[1]).toMatch(/^2:[a-z]{2}\tbbb$/);
-    expect(lines[2]).toMatch(/^3:[a-z]{2}\tccc$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}\.1\taaa$/);
+    expect(lines[1]).toMatch(/^[a-z]{2}\.2\tbbb$/);
+    expect(lines[2]).toMatch(/^[a-z]{2}\.3\tccc$/);
   });
 
   test("CRLF line endings", async () => {
@@ -105,7 +105,7 @@ describe("line endings", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(3);
     // Content should not contain \r
     for (const l of lines) {
@@ -120,7 +120,7 @@ describe("line endings", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(4);
   });
 
@@ -130,9 +130,9 @@ describe("line endings", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^1:[a-z]{2}\taaa$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}\.1\taaa$/);
   });
 });
 
@@ -147,7 +147,7 @@ describe("unicode content", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(3);
     expect(lines[0]).toContain("日本語");
     expect(lines[1]).toContain("ΣΩΔ");
@@ -160,7 +160,7 @@ describe("unicode content", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain("𝕳ello 🎉");
     expect(lines[1]).toContain("world 𝄞");
@@ -172,7 +172,7 @@ describe("unicode content", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain("  \t  ");
   });
@@ -270,7 +270,7 @@ describe("range parameters", () => {
 
     const result = await handleRead({ file_path: f, ranges: ["1-999"], projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(2);
   });
 
@@ -280,9 +280,9 @@ describe("range parameters", () => {
 
     const result = await handleRead({ file_path: f, ranges: ["2"], projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const lines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
+    const lines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatch(/^2:[a-z]{2}\tbbb$/);
+    expect(lines[0]).toMatch(/^[a-z]{2}\.2\tbbb$/);
   });
 
   test("reading a middle range produces correct checksum", async () => {
@@ -347,8 +347,8 @@ describe("checksum consistency", () => {
     const r1 = await handleRead({ file_path: f, projectDir: testDir });
     const r2 = await handleRead({ file_path: f, projectDir: testDir });
     // Extract the hash portion of the first content line
-    const hash1 = r1.content[0].text.split("\n")[0].match(/^1:([a-z]{2})/)?.[1];
-    const hash2 = r2.content[0].text.split("\n")[0].match(/^1:([a-z]{2})/)?.[1];
+    const hash1 = r1.content[0].text.split("\n")[0].match(/^([a-z]{2})\.\d+/)?.[1];
+    const hash2 = r2.content[0].text.split("\n")[0].match(/^([a-z]{2})\.\d+/)?.[1];
     expect(hash1).toBe(hash2);
   });
 });
@@ -375,11 +375,11 @@ describe("long lines", () => {
 
     const result = await handleRead({ file_path: f, projectDir: testDir });
     expect(result.isError).toBeUndefined();
-    const contentLines = result.content[0].text.split("\n").filter((l) => l.match(/^\d+:/));
+    const contentLines = result.content[0].text.split("\n").filter((l) => l.match(LINE_PATTERN));
     expect(contentLines).toHaveLength(1000);
     // Verify line numbering at boundaries
-    expect(contentLines[0]).toMatch(/^1:/);
-    expect(contentLines[999]).toMatch(/^1000:/);
+    expect(contentLines[0]).toMatch(/^[a-z]{2}\.1\t/);
+    expect(contentLines[999]).toMatch(/^[a-z]{2}\.1000\t/);
   });
 });
 

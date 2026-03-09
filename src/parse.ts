@@ -10,32 +10,43 @@ interface LineRef {
 }
 
 /**
- * Parse a `line:hash` reference string like "4:mp".
+ * Parse a `hash.line` reference string like "mp.4".
  *
- * Special case: "0:" is valid (insert at file start, empty hash).
+ * The hash is the 2-letter tag that appears before the line number in
+ * trueline_read / trueline_search output. The agent copies it verbatim
+ * when constructing the edit range, so the boundary hash travels with
+ * the line number naturally.
+ *
+ * Special case: bare "0" is valid (insert at file start, no hash).
  * Throws on invalid format.
  */
-function parseLineHash(ref: string): LineRef {
-  const colonIdx = ref.indexOf(":");
-  if (colonIdx === -1) {
-    throw new Error(`Invalid line:hash reference "${ref}" — missing colon`);
+function parseHashLine(ref: string): LineRef {
+  const dotIdx = ref.indexOf(".");
+  if (dotIdx === -1) {
+    // No dot — must be bare "0" for insert-at-start
+    if (!DECIMAL_INT.test(ref)) {
+      throw new Error(`Invalid hash.line reference "${ref}" — expected format "hash.line" (e.g. "ab.12")`);
+    }
+    const line = Number(ref);
+    if (line !== 0) {
+      throw new Error(`Invalid hash.line reference "${ref}" — bare line number only allowed for 0`);
+    }
+    return { line: 0, hash: "" };
   }
 
-  const lineStr = ref.slice(0, colonIdx);
-  const hash = ref.slice(colonIdx + 1);
+  const hash = ref.slice(0, dotIdx);
+  const lineStr = ref.slice(dotIdx + 1);
 
-  // Reject non-decimal strings before Number() conversion — without this,
-  // Number("") === 0 and Number(" ") === 0 would silently parse as line 0.
   if (!DECIMAL_INT.test(lineStr)) {
     throw new Error(`Invalid line number in "${ref}" — must be a non-negative integer`);
   }
 
   const line = Number(lineStr);
 
-  if (line === 0 && hash !== "") {
-    throw new Error(`Invalid line:hash reference "${ref}" — line 0 must have empty hash`);
+  if (line === 0) {
+    throw new Error(`Invalid hash.line reference "${ref}" — line 0 must use bare "0" with no hash`);
   }
-  if (line > 0 && !/^[a-z]{2}$/.test(hash)) {
+  if (!/^[a-z]{2}$/.test(hash)) {
     throw new Error(`Invalid hash in "${ref}" — must be exactly 2 lowercase letters`);
   }
 
@@ -52,9 +63,9 @@ interface RangeRef {
  * Parse a range string into start/end LineRefs.
  *
  * Accepts three forms:
- *   - "12:gh-21:yz"  — explicit start-end range (replace)
- *   - "5:ab"          — single-line shorthand, equivalent to "5:ab-5:ab"
- *   - "+5:ab"         — insert-after line 5 (single-line only)
+ *   - "gh.12-yz.21"  — explicit start-end range (replace)
+ *   - "ab.5"          — single-line shorthand, equivalent to "ab.5-ab.5"
+ *   - "+ab.5"         — insert-after line 5 (single-line only)
  *
  * The `+` prefix signals insert-after and is only valid on single-line
  * ranges (no `-`). Throws on invalid format or if start line > end line.
@@ -68,8 +79,8 @@ export function parseRange(range: string): RangeRef {
     raw = raw.slice(1);
   }
 
-  // Find "-" separator between two line:hash refs. Since neither line numbers
-  // (digits) nor hashes ([a-z]{2}) contain "-", indexOf is unambiguous.
+  // Find "-" separator between two hash.line refs. Since neither hashes
+  // ([a-z]{2}) nor line numbers (digits) contain "-", indexOf is unambiguous.
   const dashIdx = raw.indexOf("-");
 
   if (insertAfter && dashIdx !== -1) {
@@ -77,12 +88,12 @@ export function parseRange(range: string): RangeRef {
   }
 
   if (dashIdx === -1) {
-    const ref = parseLineHash(raw);
+    const ref = parseHashLine(raw);
     return { start: ref, end: { ...ref }, insertAfter };
   }
 
-  const start = parseLineHash(raw.slice(0, dashIdx));
-  const end = parseLineHash(raw.slice(dashIdx + 1));
+  const start = parseHashLine(raw.slice(0, dashIdx));
+  const end = parseHashLine(raw.slice(dashIdx + 1));
 
   if (start.line > end.line) {
     throw new Error(`Invalid range "${range}" — start line ${start.line} must be ≤ end line ${end.line}`);

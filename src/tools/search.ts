@@ -229,7 +229,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
       checksumHash = foldHash(checksumHash, line.hash);
 
       const marker = line.isMatch ? "  ← match" : "";
-      parts.push(`${line.lineNumber}:${hashToLetters(line.hash)}	${line.text}${marker}`);
+      parts.push(`${hashToLetters(line.hash)}.${line.lineNumber}\t${line.text}${marker}`);
     }
 
     parts.push("");

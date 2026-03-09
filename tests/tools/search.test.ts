@@ -50,7 +50,7 @@ describe("trueline_search", () => {
     // Should have checksums
     expect(text).toContain("checksum:");
     // Should have per-line hashes
-    expect(text).toMatch(/\d+:[a-z]{2}\t/);
+    expect(text).toMatch(/^[a-z]{2}\.\d+\t/m);
   });
 
   test("respects context_lines parameter", async () => {
