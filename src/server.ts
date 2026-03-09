@@ -72,13 +72,15 @@ server.registerTool(
   "trueline_read",
   {
     description:
-      'Read a file. Requires file_path. Example: {"file_path": "src/main.ts", "ranges": ["10-25"]}. Returns per-line hashes and checksums for editing.',
+      'Read a file. Example: {"file_paths": ["src/main.ts"], "ranges": ["10-25"]}. Returns per-line hashes and checksums for editing.',
     inputSchema: z.preprocess(
       coerceParams,
       z.object({
-        file_path: z
-          .string({ required_error: "file_path is required" })
-          .describe("Absolute or project-relative file path."),
+        file_paths: z
+          .array(z.string(), { required_error: "file_paths is required" })
+          .min(1)
+          .max(1)
+          .describe("File to read (single-element array). Accepts file_path as alias."),
         ranges: z
           .array(z.string())
           .describe(
@@ -96,7 +98,8 @@ server.registerTool(
     ),
   },
   safeTool(async (params) => {
-    return handleRead({ ...params, projectDir, allowedDirs });
+    const { file_paths, ...rest } = params;
+    return handleRead({ ...rest, file_path: file_paths[0], projectDir, allowedDirs });
   }),
 );
 
@@ -107,9 +110,11 @@ server.registerTool(
     inputSchema: z.preprocess(
       coerceParams,
       z.object({
-        file_path: z
-          .string({ required_error: "file_path is required" })
-          .describe("Absolute or project-relative file path."),
+        file_paths: z
+          .array(z.string(), { required_error: "file_paths is required" })
+          .min(1)
+          .max(1)
+          .describe("File to edit (single-element array). Accepts file_path as alias."),
         edits: z
           .array(
             z.object({
@@ -130,7 +135,8 @@ server.registerTool(
     ),
   },
   safeTool(async (params) => {
-    return handleEdit({ ...params, projectDir, allowedDirs });
+    const { file_paths, ...rest } = params;
+    return handleEdit({ ...rest, file_path: file_paths[0], projectDir, allowedDirs });
   }),
 );
 
@@ -198,9 +204,11 @@ server.registerTool(
     inputSchema: z.preprocess(
       coerceParams,
       z.object({
-        file_path: z
-          .string({ required_error: "file_path is required" })
-          .describe("Absolute or project-relative file path."),
+        file_paths: z
+          .array(z.string(), { required_error: "file_paths is required" })
+          .min(1)
+          .max(1)
+          .describe("File to search (single-element array). Accepts file_path as alias."),
         pattern: z
           .string({ required_error: "pattern is required" })
           .describe("Search string. Literal by default; set regex=true for regular expressions."),
@@ -225,7 +233,8 @@ server.registerTool(
     ),
   },
   safeTool(async (params) => {
-    return handleSearch({ ...params, projectDir, allowedDirs });
+    const { file_paths, ...rest } = params;
+    return handleSearch({ ...rest, file_path: file_paths[0], projectDir, allowedDirs });
   }),
 );
 
@@ -238,15 +247,18 @@ server.registerTool(
     inputSchema: z.preprocess(
       coerceParams,
       z.object({
-        file_path: z
-          .string({ required_error: "file_path is required" })
-          .describe("Absolute or project-relative file path."),
+        file_paths: z
+          .array(z.string(), { required_error: "file_paths is required" })
+          .min(1)
+          .max(1)
+          .describe("File to verify (single-element array). Accepts file_path as alias."),
         checksums: z.array(z.string()).describe('Checksum strings from a prior trueline_read, e.g. ["1-50:abcdef01"].'),
       }),
     ),
   },
   safeTool(async (params) => {
-    return handleVerify({ ...params, projectDir, allowedDirs });
+    const { file_paths, ...rest } = params;
+    return handleVerify({ ...rest, file_path: file_paths[0], projectDir, allowedDirs });
   }),
 );
 

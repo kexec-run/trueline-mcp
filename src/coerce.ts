@@ -2,12 +2,11 @@
 // Only alias-map when the canonical key was NOT explicitly provided,
 // so an agent that sends both `paths` and `file_paths` keeps the canonical one.
 const PARAM_ALIASES: Record<string, string> = {
-  // file_path (singular)
-  path: "file_path",
-  filePath: "file_path",
-  file: "file_path",
-
-  // file_paths (plural)
+  // file_paths is canonical everywhere; singular forms are aliases
+  file_path: "file_paths",
+  path: "file_paths",
+  filePath: "file_paths",
+  file: "file_paths",
   paths: "file_paths",
   filePaths: "file_paths",
   files: "file_paths",
@@ -57,6 +56,11 @@ export function coerceParams(val: unknown): unknown {
     }
 
     result[canonicalKey] = value;
+  }
+
+  // Normalize file_paths: bare string → single-element array
+  if (typeof result.file_paths === "string") {
+    result.file_paths = [result.file_paths];
   }
 
   return result;

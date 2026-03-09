@@ -14,20 +14,24 @@ describe("coerceParams", () => {
       expect(coerceParams({ paths: ["a.ts", "b.ts"] })).toEqual({ file_paths: ["a.ts", "b.ts"] });
     });
 
-    test("maps path → file_path", () => {
-      expect(coerceParams({ path: "a.ts" })).toEqual({ file_path: "a.ts" });
+    test("maps path → file_paths (wrapped)", () => {
+      expect(coerceParams({ path: "a.ts" })).toEqual({ file_paths: ["a.ts"] });
     });
 
-    test("maps filePath → file_path", () => {
-      expect(coerceParams({ filePath: "a.ts" })).toEqual({ file_path: "a.ts" });
+    test("maps filePath → file_paths (wrapped)", () => {
+      expect(coerceParams({ filePath: "a.ts" })).toEqual({ file_paths: ["a.ts"] });
     });
 
     test("maps filePaths → file_paths", () => {
       expect(coerceParams({ filePaths: ["a.ts"] })).toEqual({ file_paths: ["a.ts"] });
     });
 
-    test("maps file → file_path", () => {
-      expect(coerceParams({ file: "a.ts" })).toEqual({ file_path: "a.ts" });
+    test("maps file → file_paths (wrapped)", () => {
+      expect(coerceParams({ file: "a.ts" })).toEqual({ file_paths: ["a.ts"] });
+    });
+
+    test("maps file_path → file_paths (wrapped)", () => {
+      expect(coerceParams({ file_path: "a.ts" })).toEqual({ file_paths: ["a.ts"] });
     });
 
     test("maps files → file_paths", () => {
@@ -59,7 +63,7 @@ describe("coerceParams", () => {
     });
 
     test("leaves invalid JSON strings as-is", () => {
-      expect(coerceParams({ file_path: "[not json" })).toEqual({ file_path: "[not json" });
+      expect(coerceParams({ file_paths: "[not json" })).toEqual({ file_paths: ["[not json"] });
     });
   });
 
@@ -95,7 +99,7 @@ describe("coerceParams", () => {
 
     test("realistic trueline_read call with string ranges", () => {
       expect(coerceParams({ file_path: "src/server.ts", ranges: ["149-173"], hashes: "false" })).toEqual({
-        file_path: "src/server.ts",
+        file_paths: ["src/server.ts"],
         ranges: ["149-173"],
         hashes: false,
       });
@@ -108,7 +112,7 @@ describe("coerceParams", () => {
     });
 
     test("alias + boolean coercion together", () => {
-      expect(coerceParams({ path: "a.ts", hashes: "false" })).toEqual({ file_path: "a.ts", hashes: false });
+      expect(coerceParams({ path: "a.ts", hashes: "false" })).toEqual({ file_paths: ["a.ts"], hashes: false });
     });
 
     test("realistic trueline_outline call with paths alias", () => {
