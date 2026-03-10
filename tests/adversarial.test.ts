@@ -408,7 +408,7 @@ describe("Adversarial Tests", () => {
   });
 
   test("insert-after at last line of file without trailing newline", async () => {
-    const { path, lines, cs } = setupFile("no-trail.txt", "line1\nline2");
+    const { path, lines: _lines, cs } = setupFile("no-trail.txt", "line1\nline2");
     // original: "line1\nline2" (no trailing newline)
 
     const result = await handleEdit({
@@ -430,7 +430,7 @@ describe("Adversarial Tests", () => {
   });
 
   test("replace last line of file without trailing newline", async () => {
-    const { path, lines, cs } = setupFile("no-trail-replace.txt", "line1\nline2");
+    const { path, lines: _lines, cs } = setupFile("no-trail-replace.txt", "line1\nline2");
 
     const result = await handleEdit({
       file_path: path,
@@ -633,7 +633,7 @@ describe("Adversarial Tests", () => {
   });
 
   test("multiple insert-after at the same line", async () => {
-    const { path, lines, cs } = setupFile("multi-ia-same.txt", "line1\nline2\n");
+    const { path, lines: _lines, cs } = setupFile("multi-ia-same.txt", "line1\nline2\n");
     const result = await handleEdit({
       file_path: path,
       edits: [
@@ -677,7 +677,7 @@ describe("Adversarial Tests", () => {
   });
 
   test("insert-after at last line of file WITH trailing newline", async () => {
-    const { path, lines, cs } = setupFile("trail-nl.txt", "line1\nline2\n");
+    const { path, lines: _lines, cs } = setupFile("trail-nl.txt", "line1\nline2\n");
 
     const result = await handleEdit({
       file_path: path,
