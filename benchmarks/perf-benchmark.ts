@@ -5,9 +5,10 @@
  * Run: bun run benchmark
  */
 import { execSync } from "node:child_process";
-import { join } from "node:path";
-import { mkdtempSync, realpathSync, writeFileSync, rmSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { mkdtempSync, realpathSync, writeFileSync, rmSync, statSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { handleRead } from "../src/tools/read.ts";
 import { handleSearch } from "../src/tools/search.ts";
 import { handleDiff } from "../src/tools/diff.ts";
@@ -62,14 +63,76 @@ function benchSync(name: string, iterations: number, fn: () => void): BenchResul
   return { name, iterations, medianMs: median(times), p95Ms: p95(times) };
 }
 
-function printResults(results: BenchResult[]): void {
-  const header = `${"Benchmark".padEnd(30)} | ${"Iters".padStart(7)} | ${"Median".padStart(10)} | ${"P95".padStart(10)}`;
+// ===========================================================================
+// Baseline persistence and comparison
+// ===========================================================================
+
+const BENCH_DIR = dirname(fileURLToPath(import.meta.url));
+const BASELINE_PATH = join(BENCH_DIR, "baseline.json");
+
+// Regression threshold: flag if median is more than this fraction slower.
+const REGRESSION_THRESHOLD = 0.2;
+
+interface BaselineEntry {
+  medianMs: number;
+  p95Ms: number;
+}
+
+type Baseline = Record<string, BaselineEntry>;
+
+function loadBaseline(): Baseline | null {
+  if (!existsSync(BASELINE_PATH)) return null;
+  try {
+    return JSON.parse(readFileSync(BASELINE_PATH, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+function saveBaseline(results: BenchResult[]): void {
+  const data: Baseline = {};
+  for (const r of results) {
+    data[r.name] = { medianMs: r.medianMs, p95Ms: r.p95Ms };
+  }
+  writeFileSync(BASELINE_PATH, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+function formatDuration(ms: number): string {
+  return ms < 1 ? `${(ms * 1000).toFixed(1)}µs` : `${ms.toFixed(2)}ms`;
+}
+
+function formatDelta(current: number, baseline: number): string {
+  const pct = ((current - baseline) / baseline) * 100;
+  const sign = pct >= 0 ? "+" : "";
+  const flag = pct > REGRESSION_THRESHOLD * 100 ? " ⚠" : "";
+  return `${sign}${pct.toFixed(0)}%${flag}`;
+}
+
+function printResults(results: BenchResult[], baseline: Baseline | null): void {
+  const hasBaseline = baseline !== null;
+  const deltaCol = hasBaseline ? " | Δ Median" : "";
+  const header = `${"Benchmark".padEnd(30)} | ${"Iters".padStart(7)} | ${"Median".padStart(10)} | ${"P95".padStart(10)}${deltaCol}`;
   console.log(header);
   console.log("-".repeat(header.length));
+
+  let regressions = 0;
   for (const r of results) {
-    const med = r.medianMs < 1 ? `${(r.medianMs * 1000).toFixed(1)}µs` : `${r.medianMs.toFixed(2)}ms`;
-    const p = r.p95Ms < 1 ? `${(r.p95Ms * 1000).toFixed(1)}µs` : `${r.p95Ms.toFixed(2)}ms`;
-    console.log(`${r.name.padEnd(30)} | ${String(r.iterations).padStart(7)} | ${med.padStart(10)} | ${p.padStart(10)}`);
+    const med = formatDuration(r.medianMs);
+    const p = formatDuration(r.p95Ms);
+    let delta = "";
+    if (hasBaseline && baseline[r.name]) {
+      delta = ` | ${formatDelta(r.medianMs, baseline[r.name].medianMs).padStart(9)}`;
+      if (r.medianMs > baseline[r.name].medianMs * (1 + REGRESSION_THRESHOLD)) {
+        regressions++;
+      }
+    }
+    console.log(
+      `${r.name.padEnd(30)} | ${String(r.iterations).padStart(7)} | ${med.padStart(10)} | ${p.padStart(10)}${delta}`,
+    );
+  }
+
+  if (regressions > 0) {
+    console.log(`\n⚠ ${regressions} benchmark(s) regressed by more than ${REGRESSION_THRESHOLD * 100}%`);
   }
 }
 
@@ -339,11 +402,16 @@ async function main(): Promise<void> {
   results.push(benchHashToLetters());
   results.push(await benchSemanticDiff());
 
-  console.log();
-  printResults(results);
-
-  // Cleanup
+  // Cleanup temp dir before printing (semantic-diff already cleans its own)
   rmSync(tmpDir, { recursive: true, force: true });
+
+  const baseline = loadBaseline();
+  console.log();
+  printResults(results, baseline);
+
+  // Save current results as the new baseline
+  saveBaseline(results);
+  console.log(`\nBaseline saved to ${BASELINE_PATH}`);
 }
 
 main().catch((err) => {
