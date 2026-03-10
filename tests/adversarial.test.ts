@@ -385,6 +385,318 @@ describe("Adversarial Tests", () => {
     expect(text).toContain("showing 2 of 5 matches");
   });
 
+  test("mixed line endings (\\r, \\n, \\r\\n)", async () => {
+    // line1: \r, line2: \n, line3: \r\n, line4: none
+    const buf = Buffer.concat([
+      Buffer.from("line1\r"),
+      Buffer.from("line2\n"),
+      Buffer.from("line3\r\n"),
+      Buffer.from("line4"),
+    ]);
+    const f = join(testDir, "mixed-eol.txt");
+    writeFileSync(f, buf);
+
+    const result = await handleRead({ file_path: f, projectDir: testDir });
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+
+    expect(text).toContain("line1");
+    expect(text).toContain("line2");
+    expect(text).toContain("line3");
+    expect(text).toContain("line4");
+    expect(text).toContain("checksum: 1-4:");
+  });
+
+  test("insert-after at last line of file without trailing newline", async () => {
+    const { path, lines, cs } = setupFile("no-trail.txt", "line1\nline2");
+    // original: "line1\nline2" (no trailing newline)
+
+    const result = await handleEdit({
+      file_path: path,
+      edits: [
+        {
+          checksum: cs,
+          range: `+${lineHash("line2")}.2`,
+          content: "line3",
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    // streamingEdit should use detectedEol (\n) to separate line2 and line3,
+    // but line3 itself should not have a trailing newline.
+    expect(readFileSync(path, "utf-8")).toBe("line1\nline2\nline3");
+  });
+
+  test("replace last line of file without trailing newline", async () => {
+    const { path, lines, cs } = setupFile("no-trail-replace.txt", "line1\nline2");
+
+    const result = await handleEdit({
+      file_path: path,
+      edits: [
+        {
+          checksum: cs,
+          range: `${lineHash("line2")}.2`,
+          content: "replaced",
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(readFileSync(path, "utf-8")).toBe("line1\nreplaced");
+  });
+
+  test("access denied for directory", async () => {
+    const result = await handleRead({ file_path: testDir, projectDir: testDir });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("is not a regular file");
+  });
+
+  test("access denied for non-existent file", async () => {
+    const result = await handleRead({ file_path: join(testDir, "missing.txt"), projectDir: testDir });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("not found");
+  });
+
+  test("handleSearch resource limits (max_matches)", async () => {
+    const { path } = setupFile("many-matches.txt", "match\n".repeat(2000));
+    const result = await import("../src/tools/search.ts").then((m) =>
+      m.handleSearch({
+        file_path: path,
+        pattern: "match",
+        max_matches: 5000, // exceeds available matches
+        projectDir: testDir,
+      }),
+    );
+
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    // Should show all 2000 matches since 5000 is allowed
+    expect(text).toContain("match  ← match");
+    const matchCount = (text.match(/← match/g) || []).length;
+    expect(matchCount).toBe(2000);
+  });
+
+  test("handleSearch with high context_lines", async () => {
+    const { path } = setupFile("context-limit.txt", "1\n2\n3\nmatch\n5\n6\n7\n");
+    const result = await import("../src/tools/search.ts").then((m) =>
+      m.handleSearch({
+        file_path: path,
+        pattern: "match",
+        context_lines: 100, // exceeds file length
+        projectDir: testDir,
+      }),
+    );
+
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    // Should show the whole file with hashes (2 letters + . + number)
+    expect(text).toMatch(/[a-z]{2}\.1\t1/);
+    expect(text).toMatch(/[a-z]{2}\.7\t7/);
+  });
+
+  test("splitLines handles \\r at chunk boundary", async () => {
+    const CHUNK_SIZE = 65536;
+    const padding = "a".repeat(CHUNK_SIZE - 1);
+    const content = Buffer.concat([Buffer.from(padding), Buffer.from("\r\nline2")]);
+    const f = join(testDir, "cr-chunk-split.txt");
+    writeFileSync(f, content);
+
+    const result = await handleRead({ file_path: f, projectDir: testDir });
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("line2");
+    expect(text).toContain("checksum: 1-2:");
+  });
+
+  test("splitLines handles \\r at chunk boundary (not followed by \\n)", async () => {
+    const CHUNK_SIZE = 65536;
+    const padding = "a".repeat(CHUNK_SIZE - 1);
+    const content = Buffer.concat([Buffer.from(padding), Buffer.from("\rline2")]);
+    const f = join(testDir, "cr-only-chunk-split.txt");
+    writeFileSync(f, content);
+
+    const result = await handleRead({ file_path: f, projectDir: testDir });
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("line2");
+    expect(text).toContain("checksum: 1-2:");
+  });
+
+  test("handleSearch with extremely long line in context", async () => {
+    const longLine = "a".repeat(100000);
+    const { path } = setupFile("search-long.txt", `${longLine}\nmatch\n`);
+    const result = await import("../src/tools/search.ts").then((m) =>
+      m.handleSearch({
+        file_path: path,
+        pattern: "match",
+        context_lines: 1,
+        projectDir: testDir,
+      }),
+    );
+
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("match  ← match");
+    expect(text).toContain("a".repeat(100)); // Should see part of the long line
+  });
+
+  test("latin1 encoding round-trip", async () => {
+    // 0xE9 is 'é' in latin1
+    const buf = Buffer.from([0x61, 0xe9, 0x62, 0x0a]); // "aéb\n"
+    const f = join(testDir, "latin1.txt");
+    writeFileSync(f, buf);
+
+    const readResult = await handleRead({
+      file_path: f,
+      encoding: "latin1",
+      projectDir: testDir,
+    });
+    expect(readResult.isError).toBeUndefined();
+    const text = readResult.content[0].text;
+    expect(text).toContain("aé");
+
+    const csMatch = text.match(/checksum: (.+)/);
+    const cs = csMatch![1];
+    const lhMatch = text.match(/^([a-z]{2})\.1\t/m);
+    const lh = lhMatch![1];
+
+    const editResult = await handleEdit({
+      file_path: f,
+      encoding: "latin1",
+      edits: [
+        {
+          checksum: cs,
+          range: `${lh}.1`,
+          content: "aé-modified",
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(editResult.isError).toBeUndefined();
+    const finalBuf = readFileSync(f);
+    // "aé-modified\n" in latin1
+    expect(finalBuf[1]).toBe(0xe9);
+    expect(finalBuf.toString("latin1")).toBe("aé-modified\n");
+  });
+
+  test("handleRead merges overlapping and adjacent ranges", async () => {
+    const { path } = setupFile("ranges.txt", "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
+    const result = await handleRead({
+      file_path: path,
+      ranges: ["1-3", "3-5", "7", "8"],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    // Should have merged into 1-5 and 7-8
+    expect(text).toContain("checksum: 1-5:");
+    expect(text).toContain("checksum: 7-8:");
+    expect(text).not.toContain("checksum: 3-5:");
+  });
+
+  test("handleSearch with empty pattern", async () => {
+    const { path } = setupFile("empty-search.txt", "line1\nline2\n");
+    const result = await import("../src/tools/search.ts").then((m) =>
+      m.handleSearch({
+        file_path: path,
+        pattern: "",
+        projectDir: testDir,
+      }),
+    );
+
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("line1  ← match");
+    expect(text).toContain("line2  ← match");
+  });
+
+  test("handleSearch literal search with regex characters", async () => {
+    const { path } = setupFile("regex-chars.txt", "a.b\naxb\n");
+    const result = await import("../src/tools/search.ts").then((m) =>
+      m.handleSearch({
+        file_path: path,
+        pattern: "a.b",
+        regex: false,
+        projectDir: testDir,
+      }),
+    );
+
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("a.b  ← match");
+    expect(text).not.toContain("axb  ← match");
+  });
+
+  test("multiple insert-after at the same line", async () => {
+    const { path, lines, cs } = setupFile("multi-ia-same.txt", "line1\nline2\n");
+    const result = await handleEdit({
+      file_path: path,
+      edits: [
+        { checksum: cs, range: `+${lineHash("line1")}.1`, content: "ins1" },
+        { checksum: cs, range: `+${lineHash("line1")}.1`, content: "ins2" },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(readFileSync(path, "utf-8")).toBe("line1\nins1\nins2\nline2\n");
+  });
+
+  test("file with only \\r line endings", async () => {
+    const buf = Buffer.from("line1\rline2\rline3\r");
+    const f = join(testDir, "cr-only.txt");
+    writeFileSync(f, buf);
+
+    const result = await handleRead({ file_path: f, projectDir: testDir });
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("line1");
+    expect(text).toContain("line2");
+    expect(text).toContain("line3");
+    expect(text).toContain("checksum: 1-3:");
+  });
+
+  test("handleSearch pattern matching tab separator", async () => {
+    const { path } = setupFile("tab.txt", "a\tb\n");
+    const result = await import("../src/tools/search.ts").then((m) =>
+      m.handleSearch({
+        file_path: path,
+        pattern: "\t",
+        projectDir: testDir,
+      }),
+    );
+
+    expect(result.isError).toBeUndefined();
+    const text = result.content[0].text;
+    expect(text).toContain("a\tb  ← match");
+  });
+
+  test("insert-after at last line of file WITH trailing newline", async () => {
+    const { path, lines, cs } = setupFile("trail-nl.txt", "line1\nline2\n");
+
+    const result = await handleEdit({
+      file_path: path,
+      edits: [
+        {
+          checksum: cs,
+          range: `+${lineHash("line2")}.2`,
+          content: "line3",
+        },
+      ],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    // original: "line1\nline2\n"
+    // should become: "line1\nline2\nline3\n"
+    expect(readFileSync(path, "utf-8")).toBe("line1\nline2\nline3\n");
+  });
+
   test("file just over 10MB limit", async () => {
     const overLimit = 10 * 1024 * 1024 + 1;
     const buf = Buffer.alloc(overLimit, "a");

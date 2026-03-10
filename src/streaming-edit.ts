@@ -227,7 +227,6 @@ export async function streamingEdit(
         await enqueueLine(origBytes[k], undefined, eol && eol.length > 0 ? eol : undefined);
       }
       if (collector) for (const buf of origBytes) collector.context(buf.toString(encoding));
-      if (collector) for (const buf of origBytes) collector.context(buf.toString(encoding));
     } else {
       contentChanged = true;
       for (const buf of replacementBufs) await enqueueLine(buf);
@@ -267,6 +266,8 @@ export async function streamingEdit(
       if (!eolDetected && eolBytes.length > 0) {
         detectedEol = eolBytes;
         eolDetected = true;
+        // Update pending EOL for any line-0 content written before EOL detection
+        pendingEol = detectedEol;
       }
 
       // Compute line hash for checksum accumulators and boundary verification
