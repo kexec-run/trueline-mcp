@@ -6,6 +6,18 @@ An [MCP](https://modelcontextprotocol.io/) plugin that gives AI coding agents
 hash-verified file editing and targeted reads. Works with Claude Code, Gemini
 CLI, VS Code Copilot, OpenCode, and Codex CLI.
 
+## Installation
+
+**Claude Code** (recommended; hooks are automatic):
+
+```
+/plugin marketplace add rjkaes/trueline-mcp
+/plugin install trueline-mcp@trueline-mcp
+```
+
+**Other platforms** (Gemini CLI, VS Code Copilot, OpenCode, Codex CLI):
+See [INSTALL.md](INSTALL.md) for platform-specific setup.
+
 ## Why
 
 AI coding agents read entire files to find one function, then echo back
@@ -113,18 +125,6 @@ injected instructions tell the agent so.
 The payoff comes on larger files and multi-file editing sessions, where
 targeted reads and compact edits avoid sending hundreds or thousands of
 redundant lines through the context window.
-
-## Installation
-
-**Claude Code** (recommended; hooks are automatic):
-
-```
-/plugin marketplace add rjkaes/trueline-mcp
-/plugin install trueline-mcp@trueline-mcp
-```
-
-**Other platforms** (Gemini CLI, VS Code Copilot, OpenCode, Codex CLI):
-See [INSTALL.md](INSTALL.md) for platform-specific setup.
 
 ## Design
 
