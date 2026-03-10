@@ -283,6 +283,7 @@ export async function streamingEdit(
       for (let ci = csIdx; ci < csAccumulators.length; ci++) {
         const acc = csAccumulators[ci];
         if (lineNumber < acc.ref.startLine) break;
+        if (lineNumber > acc.ref.endLine) continue;
         acc.hash = foldHash(acc.hash, lineH);
       }
 

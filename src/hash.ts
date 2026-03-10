@@ -24,12 +24,23 @@ export function fnv1aHash(line: string): number {
     let cp = line.charCodeAt(i);
 
     // Handle surrogate pairs (codepoints > 0xFFFF)
-    if (cp >= 0xd800 && cp <= 0xdbff && i + 1 < line.length) {
-      const lo = line.charCodeAt(i + 1);
-      if (lo >= 0xdc00 && lo <= 0xdfff) {
-        cp = ((cp - 0xd800) << 10) + (lo - 0xdc00) + 0x10000;
-        i++;
+    if (cp >= 0xd800 && cp <= 0xdbff) {
+      if (i + 1 < line.length) {
+        const lo = line.charCodeAt(i + 1);
+        if (lo >= 0xdc00 && lo <= 0xdfff) {
+          cp = ((cp - 0xd800) << 10) + (lo - 0xdc00) + 0x10000;
+          i++;
+        } else {
+          // Unpaired high surrogate: encode as U+FFFD to match UTF-8 file I/O
+          cp = 0xfffd;
+        }
+      } else {
+        // Trailing high surrogate: encode as U+FFFD
+        cp = 0xfffd;
       }
+    } else if (cp >= 0xdc00 && cp <= 0xdfff) {
+      // Unpaired low surrogate: encode as U+FFFD
+      cp = 0xfffd;
     }
 
     // Encode codepoint as UTF-8 bytes, feeding each to FNV-1a
