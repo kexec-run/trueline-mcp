@@ -75,7 +75,7 @@ describe("Adversarial Tests", () => {
   });
 
   test("mtime check prevents race condition", async () => {
-    const { path, cs } = setupFile("race.txt", "initial\n");
+    setupFile("race.txt", "initial\n");
 
     // Simulate handleEdit starting but being slow.
     // We need to call streamingEdit or similar, but handleEdit does it all.
