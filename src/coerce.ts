@@ -17,6 +17,7 @@ const PARAM_ALIASES: Record<string, string> = {
   branch: "compare_against",
   git_ref: "compare_against",
   gitRef: "compare_against",
+  compareAgainst: "compare_against",
 
   // pattern (trueline_search)
   query: "pattern",
@@ -24,9 +25,18 @@ const PARAM_ALIASES: Record<string, string> = {
 
   // context_lines (trueline_search)
   context: "context_lines",
+  contextLines: "context_lines",
 
   // max_matches (trueline_search)
   limit: "max_matches",
+  maxMatches: "max_matches",
+  max_results: "max_matches",
+  maxResults: "max_matches",
+
+  // case_insensitive (trueline_search)
+  caseInsensitive: "case_insensitive",
+  ignoreCase: "case_insensitive",
+  ignore_case: "case_insensitive",
 
   // dry_run (trueline_edit)
   dryRun: "dry_run",
@@ -87,9 +97,14 @@ export function coerceParams(val: unknown): unknown {
     result.file_paths = [result.file_paths];
   }
 
-  // Normalize ranges: bare string → single-element array
+  // Normalize ranges: bare string → single-element array, numbers → strings
   if (typeof result.ranges === "string") {
     result.ranges = [result.ranges];
+  } else if (typeof result.ranges === "number") {
+    result.ranges = [String(result.ranges)];
+  }
+  if (Array.isArray(result.ranges)) {
+    result.ranges = (result.ranges as unknown[]).map((r) => (typeof r === "number" ? String(r) : r));
   }
 
   // Normalize checksums: bare string → single-element array
@@ -108,6 +123,18 @@ export function coerceParams(val: unknown): unknown {
       const parsed = Number(result[numKey]);
       if (Number.isFinite(parsed) && Number.isInteger(parsed)) {
         result[numKey] = parsed;
+      }
+    }
+  }
+
+  // Coerce edit sub-objects: join content arrays into newline-separated strings.
+  if (Array.isArray(result.edits)) {
+    for (const edit of result.edits) {
+      if (typeof edit === "object" && edit !== null) {
+        const e = edit as Record<string, unknown>;
+        if (Array.isArray(e.content)) {
+          e.content = (e.content as unknown[]).map(String).join("\n");
+        }
       }
     }
   }
