@@ -163,6 +163,197 @@ describe("coerceParams", () => {
     });
   });
 
+  describe("range → ranges alias (#1)", () => {
+    test("maps singular range string to ranges array", () => {
+      expect(coerceParams({ file_paths: ["foo.ts"], range: "10-20" })).toEqual({
+        file_paths: ["foo.ts"],
+        ranges: ["10-20"],
+      });
+    });
+
+    test("canonical ranges wins when both provided", () => {
+      expect(coerceParams({ range: "1-5", ranges: ["10-20"] })).toEqual({ ranges: ["10-20"] });
+    });
+  });
+
+  describe("ranges bare string → array (#2)", () => {
+    test("wraps bare ranges string in array", () => {
+      expect(coerceParams({ file_paths: ["foo.ts"], ranges: "10-20" })).toEqual({
+        file_paths: ["foo.ts"],
+        ranges: ["10-20"],
+      });
+    });
+  });
+
+  describe("stringified integer coercion (#3)", () => {
+    test('coerces depth: "2" → 2', () => {
+      expect(coerceParams({ file_paths: ["foo.ts"], depth: "2" })).toEqual({
+        file_paths: ["foo.ts"],
+        depth: 2,
+      });
+    });
+
+    test('coerces context_lines: "5" → 5', () => {
+      expect(coerceParams({ context_lines: "5" })).toEqual({ context_lines: 5 });
+    });
+
+    test('coerces max_matches: "20" → 20', () => {
+      expect(coerceParams({ max_matches: "20" })).toEqual({ max_matches: 20 });
+    });
+
+    test("leaves actual numbers unchanged", () => {
+      expect(coerceParams({ depth: 3 })).toEqual({ depth: 3 });
+    });
+
+    test("leaves non-integer strings unchanged", () => {
+      expect(coerceParams({ depth: "abc" })).toEqual({ depth: "abc" });
+    });
+
+    test("leaves float strings unchanged", () => {
+      expect(coerceParams({ depth: "2.5" })).toEqual({ depth: "2.5" });
+    });
+  });
+
+  describe("pattern aliases (#4)", () => {
+    test("maps query → pattern", () => {
+      expect(coerceParams({ file_paths: ["foo.ts"], query: "hello" })).toEqual({
+        file_paths: ["foo.ts"],
+        pattern: "hello",
+      });
+    });
+
+    test("maps search → pattern", () => {
+      expect(coerceParams({ file_paths: ["foo.ts"], search: "hello" })).toEqual({
+        file_paths: ["foo.ts"],
+        pattern: "hello",
+      });
+    });
+
+    test("canonical pattern wins when both provided", () => {
+      expect(coerceParams({ query: "wrong", pattern: "right" })).toEqual({ pattern: "right" });
+    });
+  });
+
+  describe("context_lines alias (#5)", () => {
+    test("maps context → context_lines", () => {
+      expect(coerceParams({ context: 3 })).toEqual({ context_lines: 3 });
+    });
+  });
+
+  describe("max_matches alias (#6)", () => {
+    test("maps limit → max_matches", () => {
+      expect(coerceParams({ limit: 5 })).toEqual({ max_matches: 5 });
+    });
+  });
+
+  describe("dry_run aliases (#7)", () => {
+    test("maps dryRun → dry_run", () => {
+      expect(coerceParams({ dryRun: true })).toEqual({ dry_run: true });
+    });
+
+    test("maps dry-run → dry_run", () => {
+      expect(coerceParams({ "dry-run": true })).toEqual({ dry_run: true });
+    });
+
+    test("canonical dry_run wins when both provided", () => {
+      expect(coerceParams({ dryRun: false, dry_run: true })).toEqual({ dry_run: true });
+    });
+  });
+
+  describe("extended boolean coercion (#8)", () => {
+    test('coerces "yes" → true', () => {
+      expect(coerceParams({ case_insensitive: "yes" })).toEqual({ case_insensitive: true });
+    });
+
+    test('coerces "no" → false', () => {
+      expect(coerceParams({ case_insensitive: "no" })).toEqual({ case_insensitive: false });
+    });
+
+    test("coerces 1 → true", () => {
+      expect(coerceParams({ regex: 1 })).toEqual({ regex: true });
+    });
+
+    test("coerces 0 → false", () => {
+      expect(coerceParams({ regex: 0 })).toEqual({ regex: false });
+    });
+  });
+
+  describe("checksums bare string → array (#9)", () => {
+    test("wraps bare checksums string in array", () => {
+      expect(coerceParams({ file_paths: ["foo.ts"], checksums: "1-50:abcdef01" })).toEqual({
+        file_paths: ["foo.ts"],
+        checksums: ["1-50:abcdef01"],
+      });
+    });
+  });
+
+  describe("edits bare object → array (#10)", () => {
+    test("wraps single edit object in array", () => {
+      const edit = { range: "ab.10-cd.12", content: "new", checksum: "1-50:abcdef01" };
+      expect(coerceParams({ file_path: "foo.ts", edits: edit })).toEqual({
+        file_paths: ["foo.ts"],
+        edits: [edit],
+      });
+    });
+
+    test("leaves edit array unchanged", () => {
+      const edit = { range: "ab.10-cd.12", content: "new", checksum: "1-50:abcdef01" };
+      expect(coerceParams({ file_path: "foo.ts", edits: [edit] })).toEqual({
+        file_paths: ["foo.ts"],
+        edits: [edit],
+      });
+    });
+
+    test("wraps single edit then receives top-level checksum", () => {
+      expect(
+        coerceParams({
+          file_path: "foo.ts",
+          checksum: "1-50:aabbccdd",
+          edits: { range: "ab.10-cd.12", content: "new" },
+        }),
+      ).toEqual({
+        file_paths: ["foo.ts"],
+        edits: [{ range: "ab.10-cd.12", content: "new", checksum: "1-50:aabbccdd" }],
+      });
+    });
+  });
+
+  describe("compare_against aliases (#11)", () => {
+    test("maps base → compare_against", () => {
+      expect(coerceParams({ file_paths: ["foo.ts"], base: "main" })).toEqual({
+        file_paths: ["foo.ts"],
+        compare_against: "main",
+      });
+    });
+
+    test("maps branch → compare_against", () => {
+      expect(coerceParams({ file_paths: ["foo.ts"], branch: "develop" })).toEqual({
+        file_paths: ["foo.ts"],
+        compare_against: "develop",
+      });
+    });
+
+    test("maps git_ref → compare_against", () => {
+      expect(coerceParams({ file_paths: ["foo.ts"], git_ref: "HEAD~2" })).toEqual({
+        file_paths: ["foo.ts"],
+        compare_against: "HEAD~2",
+      });
+    });
+
+    test("maps gitRef → compare_against", () => {
+      expect(coerceParams({ file_paths: ["foo.ts"], gitRef: "v1.0" })).toEqual({
+        file_paths: ["foo.ts"],
+        compare_against: "v1.0",
+      });
+    });
+
+    test("canonical compare_against wins", () => {
+      expect(coerceParams({ base: "wrong", compare_against: "right" })).toEqual({
+        compare_against: "right",
+      });
+    });
+  });
+
   describe("combined coercions", () => {
     test("alias + JSON coercion together", () => {
       expect(coerceParams({ paths: '["a.ts"]' })).toEqual({ file_paths: ["a.ts"] });

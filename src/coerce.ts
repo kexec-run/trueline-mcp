@@ -13,7 +13,31 @@ const PARAM_ALIASES: Record<string, string> = {
 
   // compare_against (trueline_diff)
   ref: "compare_against",
+  base: "compare_against",
+  branch: "compare_against",
+  git_ref: "compare_against",
+  gitRef: "compare_against",
+
+  // pattern (trueline_search)
+  query: "pattern",
+  search: "pattern",
+
+  // context_lines (trueline_search)
+  context: "context_lines",
+
+  // max_matches (trueline_search)
+  limit: "max_matches",
+
+  // dry_run (trueline_edit)
+  dryRun: "dry_run",
+  "dry-run": "dry_run",
+
+  // range → ranges (trueline_read); singular form maps to plural
+  range: "ranges",
 };
+
+// Known integer-valued parameters that agents sometimes stringify.
+const NUMERIC_KEYS = ["depth", "context_lines", "max_matches"];
 
 /**
  * Preprocess MCP tool parameters to be more permissive about what agents send:
@@ -45,12 +69,12 @@ export function coerceParams(val: unknown): unknown {
       }
     }
 
-    // Coerce stringified booleans
-    if (value === "true") {
+    // Coerce stringified booleans (including yes/no and 1/0)
+    if (value === "true" || value === "yes" || value === 1) {
       result[canonicalKey] = true;
       continue;
     }
-    if (value === "false") {
+    if (value === "false" || value === "no" || value === 0) {
       result[canonicalKey] = false;
       continue;
     }
@@ -61,6 +85,31 @@ export function coerceParams(val: unknown): unknown {
   // Normalize file_paths: bare string → single-element array
   if (typeof result.file_paths === "string") {
     result.file_paths = [result.file_paths];
+  }
+
+  // Normalize ranges: bare string → single-element array
+  if (typeof result.ranges === "string") {
+    result.ranges = [result.ranges];
+  }
+
+  // Normalize checksums: bare string → single-element array
+  if (typeof result.checksums === "string") {
+    result.checksums = [result.checksums];
+  }
+
+  // Normalize edits: bare object → single-element array
+  if (typeof result.edits === "object" && result.edits !== null && !Array.isArray(result.edits)) {
+    result.edits = [result.edits];
+  }
+
+  // Coerce stringified integers for known numeric fields
+  for (const numKey of NUMERIC_KEYS) {
+    if (numKey in result && typeof result[numKey] === "string") {
+      const parsed = Number(result[numKey]);
+      if (Number.isFinite(parsed) && Number.isInteger(parsed)) {
+        result[numKey] = parsed;
+      }
+    }
   }
 
   // Push top-level checksum into edits that are missing one.
