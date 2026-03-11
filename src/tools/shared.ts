@@ -75,9 +75,26 @@ export async function validatePath(
       error: errorResult("Project directory not found or inaccessible"),
     };
   }
-  // allowedDirs are already resolved to real paths by the caller (server.ts).
-  const allBases = [realBase, ...allowedDirs];
-  const isContained = allBases.some((base) => realPath === base || realPath.startsWith(base + sep));
+  // Resolve allowedDirs through realpath too, so short 8.3 names and
+  // inconsistent casing (Windows drive letters) match the file's realPath.
+  const resolvedAllowed = await Promise.all(
+    allowedDirs.map(async (d) => {
+      try {
+        return await realpath(d);
+      } catch {
+        return d;
+      }
+    }),
+  );
+  const allBases = [realBase, ...resolvedAllowed];
+  const isContained =
+    process.platform === "win32"
+      ? allBases.some((base) => {
+          const rp = realPath.toLowerCase();
+          const bp = base.toLowerCase();
+          return rp === bp || rp.startsWith(bp + sep);
+        })
+      : allBases.some((base) => realPath === base || realPath.startsWith(base + sep));
   if (!isContained) {
     return {
       ok: false,
