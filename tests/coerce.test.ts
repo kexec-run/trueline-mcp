@@ -105,6 +105,64 @@ describe("coerceParams", () => {
     });
   });
 
+  describe("top-level checksum pushed into edits", () => {
+    test("moves top-level checksum into edits missing one", () => {
+      expect(
+        coerceParams({
+          file_path: "foo.ts",
+          checksum: "16-20:abcd1234",
+          edits: [{ range: "ab.18-ab.18", content: "new line" }],
+        }),
+      ).toEqual({
+        file_paths: ["foo.ts"],
+        edits: [{ range: "ab.18-ab.18", content: "new line", checksum: "16-20:abcd1234" }],
+      });
+    });
+
+    test("does not overwrite per-edit checksum", () => {
+      expect(
+        coerceParams({
+          file_path: "foo.ts",
+          checksum: "16-20:toplevel",
+          edits: [{ range: "ab.18-ab.18", content: "new line", checksum: "16-20:peredit" }],
+        }),
+      ).toEqual({
+        file_paths: ["foo.ts"],
+        edits: [{ range: "ab.18-ab.18", content: "new line", checksum: "16-20:peredit" }],
+      });
+    });
+
+    test("fills only edits missing checksum in a mixed batch", () => {
+      expect(
+        coerceParams({
+          file_path: "foo.ts",
+          checksum: "1-50:aabbccdd",
+          edits: [
+            { range: "ab.10-cd.12", content: "first", checksum: "1-50:existing" },
+            { range: "ef.20-gh.22", content: "second" },
+          ],
+        }),
+      ).toEqual({
+        file_paths: ["foo.ts"],
+        edits: [
+          { range: "ab.10-cd.12", content: "first", checksum: "1-50:existing" },
+          { range: "ef.20-gh.22", content: "second", checksum: "1-50:aabbccdd" },
+        ],
+      });
+    });
+
+    test("no-op when no top-level checksum", () => {
+      const input = {
+        file_path: "foo.ts",
+        edits: [{ range: "ab.10-cd.12", content: "text", checksum: "1-50:abcdef01" }],
+      };
+      expect(coerceParams(input)).toEqual({
+        file_paths: ["foo.ts"],
+        edits: [{ range: "ab.10-cd.12", content: "text", checksum: "1-50:abcdef01" }],
+      });
+    });
+  });
+
   describe("combined coercions", () => {
     test("alias + JSON coercion together", () => {
       expect(coerceParams({ paths: '["a.ts"]' })).toEqual({ file_paths: ["a.ts"] });

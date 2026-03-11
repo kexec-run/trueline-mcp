@@ -63,5 +63,17 @@ export function coerceParams(val: unknown): unknown {
     result.file_paths = [result.file_paths];
   }
 
+  // Push top-level checksum into edits that are missing one.
+  // Models sometimes pass {checksum: "...", edits: [{range, content}]}
+  // instead of {edits: [{range, content, checksum: "..."}]}.
+  if (typeof result.checksum === "string" && Array.isArray(result.edits)) {
+    for (const edit of result.edits) {
+      if (typeof edit === "object" && edit !== null && !("checksum" in edit)) {
+        (edit as Record<string, unknown>).checksum = result.checksum;
+      }
+    }
+    delete result.checksum;
+  }
+
   return result;
 }
