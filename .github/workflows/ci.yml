@@ -42,10 +42,10 @@ jobs:
         run: |
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git add -f dist/server.js
+          git add -f dist/server.js dist/cli.js
           if git diff --cached --quiet; then
-            echo "dist/server.js unchanged — nothing to commit"
+            echo "dist/ unchanged — nothing to commit"
           else
-            git commit -m "chore(build): update dist/server.js"
+            git commit -m "chore(build): update dist/"
             git push
           fi
