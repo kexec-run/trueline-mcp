@@ -33,6 +33,7 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
 
   let state: State = State.NORMAL;
   let currentHeadingDepth = -1; // depth of the most recent heading (-1 = none seen)
+  let lastHeadingIdx = -1; // index into entries[] of the most recent heading
 
   // Frontmatter state
   let frontmatterStart = 0;
@@ -66,17 +67,15 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
 
   /** Close the range of the last heading entry to just before `lineNumber`. */
   function closeLastHeadingRange(lineNumber: number) {
-    for (let i = entries.length - 1; i >= 0; i--) {
-      if (entries[i].nodeType.match(/^h\d/)) {
-        entries[i].endLine = lineNumber - 1;
-        break;
-      }
+    if (lastHeadingIdx >= 0) {
+      entries[lastHeadingIdx].endLine = lineNumber - 1;
     }
   }
 
   function emitHeading(level: number, text: string, lineNumber: number) {
     closeLastHeadingRange(lineNumber);
     currentHeadingDepth = level - 1;
+    lastHeadingIdx = entries.length; // index of the entry we're about to push
     entries.push({
       startLine: lineNumber,
       endLine: totalLines, // default: extends to EOF, updated by next heading
@@ -335,11 +334,8 @@ export async function extractMarkdownOutline(filePath: string): Promise<{
   // Unclosed frontmatter at EOF: don't emit (ambiguous)
 
   // Fix up the last heading's endLine to the actual last line
-  for (let i = entries.length - 1; i >= 0; i--) {
-    if (entries[i].nodeType.match(/^h\d/)) {
-      entries[i].endLine = totalLines;
-      break;
-    }
+  if (lastHeadingIdx >= 0) {
+    entries[lastHeadingIdx].endLine = totalLines;
   }
 
   return { entries, totalLines };

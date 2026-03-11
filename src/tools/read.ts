@@ -168,7 +168,8 @@ export async function handleReadMulti(params: ReadMultiParams): Promise<ToolResu
   const parts: string[] = [];
   for (const fp of file_paths) {
     const result = await handleRead({ ...rest, file_path: fp });
-    const text = result.content[0].text;
+    if (result.isError) return result;
+    const text = (result.content[0] as { text: string }).text;
     parts.push(`--- ${fp} ---\n${text}`);
   }
   return textResult(parts.join("\n\n"));
