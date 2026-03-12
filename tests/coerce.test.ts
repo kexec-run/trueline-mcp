@@ -185,6 +185,22 @@ describe("coerceParams", () => {
     });
   });
 
+  describe("ranges per-file object → flat array", () => {
+    test("extracts values from per-file object", () => {
+      expect(coerceParams({ file_paths: ["src/server.ts"], ranges: { "src/server.ts": "144-169" } })).toEqual({
+        file_paths: ["src/server.ts"],
+        ranges: ["144-169"],
+      });
+    });
+
+    test("flattens array values from per-file object", () => {
+      expect(coerceParams({ file_paths: ["a.ts"], ranges: { "a.ts": ["1-10", "20-30"] } })).toEqual({
+        file_paths: ["a.ts"],
+        ranges: ["1-10", "20-30"],
+      });
+    });
+  });
+
   describe("stringified integer coercion (#3)", () => {
     test('coerces depth: "2" → 2', () => {
       expect(coerceParams({ file_paths: ["foo.ts"], depth: "2" })).toEqual({

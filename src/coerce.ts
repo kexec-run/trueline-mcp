@@ -97,11 +97,15 @@ export function coerceParams(val: unknown): unknown {
     result.file_paths = [result.file_paths];
   }
 
-  // Normalize ranges: bare string → single-element array, numbers → strings
+  // Normalize ranges: bare string → single-element array, numbers → strings,
+  // per-file object → flat array of values (LLMs sometimes send
+  // {"src/foo.ts": "10-20"} instead of ["10-20"]).
   if (typeof result.ranges === "string") {
     result.ranges = [result.ranges];
   } else if (typeof result.ranges === "number") {
     result.ranges = [String(result.ranges)];
+  } else if (typeof result.ranges === "object" && result.ranges !== null && !Array.isArray(result.ranges)) {
+    result.ranges = Object.values(result.ranges as Record<string, unknown>).flat();
   }
   if (Array.isArray(result.ranges)) {
     result.ranges = (result.ranges as unknown[]).map((r) => (typeof r === "number" ? String(r) : r));
