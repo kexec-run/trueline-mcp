@@ -79,12 +79,15 @@ export function coerceParams(val: unknown): unknown {
       }
     }
 
-    // Coerce stringified booleans (including yes/no and 1/0)
-    if (value === "true" || value === "yes" || value === 1) {
+    // Coerce stringified booleans (including yes/no and 1/0).
+    // Skip 1/0 coercion for known numeric keys so context_lines: 1
+    // doesn't become true.
+    const isNumericKey = NUMERIC_KEYS.includes(canonicalKey);
+    if (value === "true" || value === "yes" || (!isNumericKey && value === 1)) {
       result[canonicalKey] = true;
       continue;
     }
-    if (value === "false" || value === "no" || value === 0) {
+    if (value === "false" || value === "no" || (!isNumericKey && value === 0)) {
       result[canonicalKey] = false;
       continue;
     }

@@ -221,6 +221,14 @@ describe("coerceParams", () => {
       expect(coerceParams({ depth: 3 })).toEqual({ depth: 3 });
     });
 
+    test("does not coerce context_lines: 1 to boolean true", () => {
+      expect(coerceParams({ context_lines: 1 })).toEqual({ context_lines: 1 });
+    });
+
+    test("does not coerce max_matches: 0 to boolean false", () => {
+      expect(coerceParams({ max_matches: 0 })).toEqual({ max_matches: 0 });
+    });
+
     test("leaves non-integer strings unchanged", () => {
       expect(coerceParams({ depth: "abc" })).toEqual({ depth: "abc" });
     });
