@@ -8,3 +8,8 @@ dist/
 SESSION.md
 docs/plans/
 CLAUDE.md
+
+# Dolt database files (added by bd init)
+.beads/
+.dolt/
+*.db
