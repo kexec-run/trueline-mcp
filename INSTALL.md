@@ -8,7 +8,7 @@ hooks bring compliance from ~60% (instruction-only) to ~98% (with hooks).
 Install from the plugin marketplace — no manual configuration needed:
 
 ```
-/plugin marketplace add rjkaes/trueline-mcp
+/plugin marketplace add kexec-run/trueline-mcp
 /plugin install trueline-mcp@trueline-mcp
 ```
 
@@ -108,23 +108,96 @@ Add to your `opencode.json`:
 {
   "mcp": {
     "trueline": {
-      "command": "npx",
-      "args": ["-y", "trueline-mcp@latest"]
+      "command": ["npx", "-y", "trueline-mcp@latest"]
     }
   }
 }
 ```
 
-### 2. Add the instruction file
+### 2. Clone trueline-mcp
 
-Copy `configs/opencode/AGENTS.md` into your project root. This tells the
-agent to use trueline tools instead of built-in `view` and `edit`.
+The plugin imports routing logic from hooks/core. Clone the repo:
 
-### 3. Hooks
+```bash
+git clone https://github.com/kexec-run/trueline-mcp.git ~/.config/opencode/trueline-mcp
+```
 
-OpenCode uses in-process TypeScript plugins rather than JSON stdin/stdout
-hooks. Hook support for OpenCode is not yet implemented — the instruction file
-provides ~60% compliance on its own.
+### 3. Plugin
+
+Copy `configs/opencode/trueline.ts` to `~/.config/opencode/plugins/`:
+
+```bash
+mkdir -p ~/.config/opencode/plugins
+curl -o ~/.config/opencode/plugins/trueline.ts \
+  https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/trueline.ts
+```
+
+### 4. Plugin dependency
+
+Copy `configs/opencode/package.json` to `~/.config/opencode/package.json`:
+
+```bash
+curl -o ~/.config/opencode/package.json \
+  https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/package.json
+```
+
+### 5. Restart
+
+Hooks provide ~100% compliance on edits. The plugin uses three Kilo/OpenCode hooks:
+
+| Hook | Purpose |
+|------|---------|
+| `experimental.chat.system.transform` | Injects trueline instructions into system prompt |
+| `tool.definition` | Appends hints to `read`/`edit` tool descriptions |
+| `tool.execute.before` | Blocks full reads on files ≥15KB |
+
+## Kilo
+
+### 1. Add the MCP server
+
+Add to `~/.config/kilo/kilo.json` (global) or your project root:
+
+```json
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "mcp": {
+    "trueline": {
+      "type": "local",
+      "command": ["npx", "-y", "trueline-mcp@latest"],
+      "enabled": true
+    }
+  }
+}
+```
+
+### 2. Clone trueline-mcp
+
+```bash
+git clone https://github.com/kexec-run/trueline-mcp.git ~/.config/kilo/trueline-mcp
+```
+
+### 3. Plugin
+
+Copy `configs/opencode/trueline.ts` to `~/.config/kilo/plugins/`:
+
+```bash
+mkdir -p ~/.config/kilo/plugins
+curl -o ~/.config/kilo/plugins/trueline.ts \
+  https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/trueline.ts
+```
+
+### 4. Plugin dependency
+
+Copy `configs/opencode/package.json` to `~/.config/kilo/package.json`:
+
+```bash
+curl -o ~/.config/kilo/package.json \
+  https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/package.json
+```
+
+Kilo runs `bun install` at startup to install `@kilocode/plugin`.
+
+### 5. Restart
 
 ## Codex CLI
 

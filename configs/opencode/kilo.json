@@ -1,0 +1,10 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "mcp": {
+    "trueline": {
+      "type": "local",
+      "command": ["npx", "-y", "trueline-mcp@latest"],
+      "enabled": true
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "mcp": {
+    "trueline": {
+      "command": ["npx", "-y", "trueline-mcp@latest"]
+    }
+  }
+}
