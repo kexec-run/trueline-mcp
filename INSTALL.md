@@ -132,24 +132,7 @@ curl -o ~/.config/opencode/plugins/trueline.ts \
   https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/trueline.ts
 ```
 
-### 4. Plugin dependency
-
-Copy `configs/opencode/package.json` to `~/.config/opencode/package.json`:
-
-```bash
-curl -o ~/.config/opencode/package.json \
-  https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/package.json
-```
-
-### 5. Restart
-
-Hooks provide ~100% compliance on edits. The plugin uses three Kilo/OpenCode hooks:
-
-| Hook | Purpose |
-|------|---------|
-| `experimental.chat.system.transform` | Injects trueline instructions into system prompt |
-| `tool.definition` | Appends hints to `read`/`edit` tool descriptions |
-| `tool.execute.before` | Blocks full reads on files ≥15KB |
+### 4. Restart
 
 ## Kilo
 
@@ -186,18 +169,7 @@ curl -o ~/.config/kilo/plugins/trueline.ts \
   https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/trueline.ts
 ```
 
-### 4. Plugin dependency
-
-Copy `configs/opencode/package.json` to `~/.config/kilo/package.json`:
-
-```bash
-curl -o ~/.config/kilo/package.json \
-  https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/package.json
-```
-
-Kilo runs `bun install` at startup to install `@kilocode/plugin`.
-
-### 5. Restart
+### 4. Restart
 
 ## Codex CLI
 

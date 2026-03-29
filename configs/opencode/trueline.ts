@@ -1,4 +1,5 @@
-import type { Plugin } from "@kilocode/plugin"
+// OpenCode plugin — no @opencode-ai/plugin type import needed.
+// Hooks are inferred at runtime.
 
 // ==============================================================================
 // Import from trueline-mcp hooks/core (source of truth)
@@ -76,7 +77,7 @@ async function createAccessChecker(projectDir: string | undefined) {
 // Plugin
 // ==============================================================================
 
-export const TruelinePlugin: Plugin = async (ctx) => {
+export const TruelinePlugin = async (ctx: { directory: string | undefined }) => {
   const canAccess = await createAccessChecker(ctx.directory)
 
   return {
