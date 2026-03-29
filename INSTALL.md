@@ -132,7 +132,16 @@ curl -o ~/.config/opencode/plugins/trueline.ts \
   https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/trueline.ts
 ```
 
-### 4. Restart
+### 4. Instructions (fallback)
+
+The plugin injects instructions via system prompt. AGENTS.md is a fallback:
+
+```bash
+curl -o ~/.config/opencode/AGENTS.md \
+  https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/AGENTS.md
+```
+
+### 5. Restart
 
 ## Kilo
 
@@ -169,7 +178,14 @@ curl -o ~/.config/kilo/plugins/trueline.ts \
   https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/trueline.ts
 ```
 
-### 4. Restart
+### 4. Instructions (fallback)
+
+```bash
+curl -o ~/.config/kilo/AGENTS.md \
+  https://raw.githubusercontent.com/kexec-run/trueline-mcp/main/configs/opencode/AGENTS.md
+```
+
+### 5. Restart
 
 ## Codex CLI
 
