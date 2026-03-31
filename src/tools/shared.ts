@@ -185,7 +185,17 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
     const checksumRef = parseChecksum(edit.checksum);
     checksumRefMap.set(edit.checksum, checksumRef);
 
-    const rangeRef = parseRange(edit.range);
+    let rangeRef: ReturnType<typeof parseRange>;
+    try {
+      rangeRef = parseRange(edit.range);
+    } catch (err) {
+      // Enhance bare-number errors with checksum context so the LLM knows where to look.
+      const msg = err instanceof Error ? err.message : String(err);
+      const hint =
+        ` Your checksum covers lines ${checksumRef.startLine}\u2013${checksumRef.endLine}. ` +
+        "Re-read or search near that line to get its hash.line prefix.";
+      throw new Error(msg + hint);
+    }
 
     // Explicit action field takes precedence over + prefix in range.
     // This makes intent unambiguous for LLMs that forget the + prefix.
