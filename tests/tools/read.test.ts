@@ -1,12 +1,16 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test";
+import { describe, expect, test, beforeAll, beforeEach, afterAll } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { handleRead, handleReadMulti } from "../../src/tools/read.ts";
+import { handleRead, handleReadMulti, clearReadCache } from "../../src/tools/read.ts";
 import { LINE_PATTERN } from "../helpers.ts";
 
 let testDir: string;
 let testFile: string;
+
+beforeEach(() => {
+  clearReadCache();
+});
 
 beforeAll(() => {
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-read-test-")));
@@ -228,6 +232,7 @@ describe("handleRead", () => {
       projectDir: testDir,
       allowedDirs: [testDir],
     });
+    clearReadCache(); // bypass cache to compare fresh reads
     const direct = await handleRead({
       file_path: testFile,
       projectDir: testDir,

@@ -8,6 +8,11 @@
 // Output is assembled as raw byte buffers (line prefixes are ASCII, line
 // content stays as the original bytes) and decoded to a string once at the
 // end.  This avoids a per-line `Buffer.toString()` allocation.
+//
+// Unchanged-file optimization: when a file has been read before and its mtime
+// hasn't changed, returns a stub message with cached checksums instead of
+// re-streaming the file. The model already has the content in context from the
+// earlier read.
 // ==============================================================================
 
 import { LF_BUF } from "../line-splitter.ts";
@@ -23,6 +28,42 @@ import {
 import { parseRanges, type ReadRange } from "../parse.ts";
 import { binaryFileError, isBinaryError, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
+
+// ==============================================================================
+// Read cache — returns a stub when a file hasn't changed since the last read
+// ==============================================================================
+
+interface ReadCacheEntry {
+  mtimeMs: number;
+  rangesKey: string; // serialized ranges for cache key
+  checksums: string[]; // checksum lines (e.g., "1-50:abc12345")
+  encodingLine: string; // encoding metadata line, or empty
+}
+
+// Keyed by resolved (absolute) file path.
+const readCache = new Map<string, ReadCacheEntry>();
+
+/** Serialize ranges into a stable cache key. */
+function rangesKey(ranges: ReadRange[]): string {
+  return ranges.map((r) => `${r.start}-${r.end}`).join(",");
+}
+
+/** Build the stub response for an unchanged file. */
+function unchangedStub(entry: ReadCacheEntry): string {
+  const parts = [
+    "File unchanged since last read. Content from the earlier read is still current.",
+    "",
+    ...entry.checksums.map((cs) => `checksum: ${cs}`),
+  ];
+  if (entry.encodingLine) parts.push(entry.encodingLine);
+  parts.push("", "To edit: trueline_edit (not Edit tool)");
+  return parts.join("\n");
+}
+
+/** Clear the read cache (for testing). */
+export function clearReadCache(): void {
+  readCache.clear();
+}
 
 interface ReadParams {
   file_path: string;
@@ -54,13 +95,20 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
     return errorResult((err as Error).message);
   }
 
-  const { resolvedPath } = validated;
+  const { resolvedPath, mtimeMs } = validated;
 
   let ranges: ReadRange[];
   try {
     ranges = parseRanges(params.ranges);
   } catch (err: unknown) {
     return errorResult((err as Error).message);
+  }
+
+  // Check cache: if same file, same ranges, same mtime → return stub + checksums
+  const rKey = rangesKey(ranges);
+  const cached = readCache.get(resolvedPath);
+  if (cached && cached.mtimeMs === mtimeMs && cached.rangesKey === rKey) {
+    return textResult(unchangedStub(cached));
   }
 
   const MAX_OUTPUT_LINES = 2000;
@@ -75,6 +123,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   let totalLines = 0;
   let outputLines = 0;
   let truncated = false;
+  const collectedChecksums: string[] = [];
 
   // Resolve encoding before streaming — transcodedLines peeks at the BOM.
   const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
@@ -94,7 +143,9 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
       // Past current range — close it, advance
       if (lineNumber > currentRange.end) {
-        const checksumLine = `\nchecksum: ${formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash)}\n`;
+        const cs = formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash);
+        collectedChecksums.push(cs);
+        const checksumLine = `\nchecksum: ${cs}\n`;
         const cb = Buffer.from(checksumLine);
         outputChunks.push(cb);
         outputLen += cb.length;
@@ -136,6 +187,7 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   // Empty file
   if (totalLines === 0 && !truncated) {
+    readCache.set(resolvedPath, { mtimeMs, rangesKey: rKey, checksums: [EMPTY_FILE_CHECKSUM], encodingLine: "" });
     return textResult(`(empty file)\n\nchecksum: ${EMPTY_FILE_CHECKSUM}`);
   }
 
@@ -146,7 +198,9 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
 
   // Emit checksum for the last range (only if we output any lines in it)
   if (rangeFirstLine > 0 && rangeLastLine > 0) {
-    const checksumLine = `\nchecksum: ${formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash)}`;
+    const cs = formatChecksum(rangeFirstLine, rangeLastLine, rangeChecksumHash);
+    collectedChecksums.push(cs);
+    const checksumLine = `\nchecksum: ${cs}`;
     const cb = Buffer.from(checksumLine);
     outputChunks.push(cb);
     outputLen += cb.length;
@@ -173,6 +227,15 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   const hint = Buffer.from("\n\nTo edit: trueline_edit (not Edit tool)");
   outputChunks.push(hint);
   outputLen += hint.length;
+
+  // Populate cache for future unchanged-file checks (skip truncated reads —
+  // they don't cover the full requested range, so the checksums are incomplete)
+  if (!truncated && collectedChecksums.length > 0) {
+    const encodingLine = bomInfo.hasBOM
+      ? `encoding: ${bomInfo.encoding === "utf-8" ? "utf-8-bom" : bomInfo.encoding}`
+      : "";
+    readCache.set(resolvedPath, { mtimeMs, rangesKey: rKey, checksums: collectedChecksums, encodingLine });
+  }
 
   // UTF-16 content has been transcoded to UTF-8; always decode output as UTF-8.
   const outputEnc = bomInfo.encoding === "utf-8" ? enc : "utf-8";

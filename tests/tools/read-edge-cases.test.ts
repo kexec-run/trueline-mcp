@@ -1,12 +1,16 @@
-import { describe, expect, test, beforeAll, afterAll } from "bun:test";
+import { describe, expect, test, beforeAll, beforeEach, afterAll } from "bun:test";
 import { mkdtempSync, realpathSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { handleRead } from "../../src/tools/read.ts";
+import { handleRead, clearReadCache } from "../../src/tools/read.ts";
 import { EMPTY_FILE_CHECKSUM } from "../../src/hash.ts";
 import { rangeChecksum, LINE_PATTERN } from "../helpers.ts";
 
 let testDir: string;
+
+beforeEach(() => {
+  clearReadCache();
+});
 
 beforeAll(() => {
   testDir = realpathSync(mkdtempSync(join(tmpdir(), "trueline-read-edge-")));
@@ -345,6 +349,7 @@ describe("checksum consistency", () => {
     writeFileSync(f, "hello world\n");
 
     const r1 = await handleRead({ file_path: f, projectDir: testDir });
+    clearReadCache(); // bypass cache to test hash determinism
     const r2 = await handleRead({ file_path: f, projectDir: testDir });
     // Extract the hash portion of the first content line
     const hash1 = r1.content[0].text.split("\n")[0].match(/^([a-z]{2})\.\d+/)?.[1];
