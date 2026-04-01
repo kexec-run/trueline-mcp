@@ -1,4 +1,5 @@
 import { realpath, stat } from "node:fs/promises";
+import { statSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { type ChecksumRef, parseRange } from "../parse.ts";
 import { refToChecksumRef, resolveRef } from "../ref-store.ts";
@@ -171,6 +172,19 @@ type ValidateEditsOk = {
 type ValidateEditsErr = { ok: false; error: ToolResult };
 type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
 
+// On Windows, async realpath() and realpathSync() may disagree on 8.3 short
+// names (e.g. RUNNER~1 vs runneradmin). Compare by inode to handle this.
+function sameFile(a: string, b: string): boolean {
+  if (process.platform !== "win32") return false;
+  try {
+    const sa = statSync(a);
+    const sb = statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino && sa.ino !== 0;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Validate edit inputs without reading file content.
  *
@@ -194,7 +208,7 @@ export function validateEdits(edits: EditInput[], resolvedPath?: string): Valida
 
     // Cross-file check: ensure the ref was issued for the file being edited.
     // Without this, an LLM could accidentally use a ref from file A to edit file B.
-    if (resolvedPath && refEntry.filePath !== resolvedPath) {
+    if (resolvedPath && refEntry.filePath !== resolvedPath && !sameFile(refEntry.filePath, resolvedPath)) {
       return {
         ok: false,
         error: errorResult(
