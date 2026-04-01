@@ -132,7 +132,7 @@ describe("Adversarial Tests", () => {
   });
 
   test("ref mismatch suggesting narrow re-read", async () => {
-    const { path, lines, ref } = setupFile("mismatch.txt", "1\n2\n3\n4\n5\n");
+    const { path, lines: _lines, ref } = setupFile("mismatch.txt", "1\n2\n3\n4\n5\n");
 
     // Modify line 1 (outside edit range)
     writeFileSync(path, "X\n2\n3\n4\n5\n");
@@ -283,7 +283,7 @@ describe("Adversarial Tests", () => {
   });
 
   test("concurrent modification detection (mtime change)", async () => {
-    const { path, lines } = setupFile("mtime.txt", "line1\nline2\nline3\n");
+    const { path, lines: _lines } = setupFile("mtime.txt", "line1\nline2\nline3\n");
     // Captured mtime at this point
     const { mtimeMs } = statSync(path);
 
