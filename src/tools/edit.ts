@@ -120,15 +120,16 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
       : issueRef(resolvedPath, 0, 0, "00000000");
 
   const summary = editSummary(built.ops);
+  const warn = built.warnings.length > 0 ? `\n\n${built.warnings.join("\n")}` : "";
 
   if (!result.changed) {
     return textResult(
-      `Edit produced no changes \u2014 file not written.\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})`,
+      `Edit produced no changes \u2014 file not written.\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})${warn}`,
     );
   }
 
   return textResult(
-    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})`,
+    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})${warn}`,
   );
 }
 
@@ -144,6 +145,11 @@ function editSummary(ops: StreamEditOp[]): string {
 
       if (op.insertAfter) {
         const location = op.startLine === 0 ? "at start of file" : `after line ${op.startLine}`;
+        if (lines === 0) {
+          // Shouldn't reach here (validateEdits rejects empty insert_after),
+          // but guard against crash in case it does.
+          return `inserted 0 lines ${location}`;
+        }
         const newStart = op.startLine + 1 + shift;
         const newEnd = op.startLine + lines + shift;
         const rangeHint =

@@ -579,4 +579,73 @@ describe("handleEdit", () => {
     const written = readFileSync(testFile, "utf-8");
     expect(written).toBe("line 1\nreplaced 2\nreplaced 3\nline 4\n");
   });
+
+  test("rejects insert_after with empty content", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const ref = issueTestRef(testFile, lines, 1, 4);
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [{ ref, range: `${h2}.2`, content: "", action: "insert_after" }],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("insert_after with empty content");
+  });
+
+  test("warns when content contains hash.line identifiers", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const ref = issueTestRef(testFile, lines, 1, 4);
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [{ ref, range: `${h2}.2`, content: "zm.82" }],
+      projectDir: testDir,
+    });
+
+    // Edit succeeds but includes a warning
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain("WARNING");
+    expect(result.content[0].text).toContain("hash.line identifiers");
+    // Content was actually written (not blocked)
+    const written = readFileSync(testFile, "utf-8");
+    expect(written).toContain("zm.82");
+  });
+
+  test("warns on multi-line content with embedded hash.line identifiers", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const ref = issueTestRef(testFile, lines, 1, 4);
+    const h2 = lineHash("line 2");
+    const h3 = lineHash("line 3");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [{ ref, range: `${h2}.2-${h3}.3`, content: "good line\nbc.80\nanother good line" }],
+      projectDir: testDir,
+    });
+
+    // Edit succeeds but includes a warning about bc.80
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain("WARNING");
+    expect(result.content[0].text).toContain("bc.80");
+  });
+
+  test("allows content that resembles hash.line but has additional text", async () => {
+    const lines = ["line 1", "line 2", "line 3", "line 4"];
+    const ref = issueTestRef(testFile, lines, 1, 4);
+    const h2 = lineHash("line 2");
+
+    const result = await handleEdit({
+      file_path: testFile,
+      edits: [{ ref, range: `${h2}.2`, content: "ab.12 is a valid version string" }],
+      projectDir: testDir,
+    });
+
+    expect(result.isError).toBeUndefined();
+    const written = readFileSync(testFile, "utf-8");
+    expect(written).toContain("ab.12 is a valid version string");
+  });
 });

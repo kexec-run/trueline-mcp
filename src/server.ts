@@ -168,7 +168,9 @@ const editSchema = z.object({
   edits: z
     .array(
       z.object({
-        ref: z.string(),
+        ref: z.string({
+          required_error: 'Missing "ref" — copy the ref ID (e.g. "R1") from trueline_read or trueline_search output.',
+        }),
         range: z.string(),
         content: z.string(),
         action: z.enum(["replace", "insert_after"]).optional(),

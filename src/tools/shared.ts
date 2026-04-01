@@ -168,6 +168,7 @@ type ValidateEditsOk = {
   ok: true;
   ops: StreamEditOp[];
   checksumRefs: ChecksumRef[];
+  warnings: string[];
 };
 type ValidateEditsErr = { ok: false; error: ToolResult };
 type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
@@ -195,6 +196,7 @@ function sameFile(a: string, b: string): boolean {
 export function validateEdits(edits: EditInput[], resolvedPath?: string): ValidateEditsResult {
   const ops: StreamEditOp[] = [];
   const checksumRefMap = new Map<string, ChecksumRef>();
+  const warnings: string[] = [];
 
   for (const edit of edits) {
     let refEntry: ReturnType<typeof resolveRef>;
@@ -251,6 +253,20 @@ export function validateEdits(edits: EditInput[], resolvedPath?: string): Valida
       };
     }
 
+    // Reject insert_after with empty content — inserting zero lines is a no-op
+    // that likely signals the LLM confused content format (e.g. sent "\n" which
+    // got stripped to "").  Rejecting early prevents a crash in editSummary and
+    // gives the LLM a chance to correct course.
+    if (rangeRef.insertAfter && edit.content === "") {
+      return {
+        ok: false,
+        error: errorResult(
+          "insert_after with empty content would insert zero lines (no-op). " +
+            "To insert a blank line, use content: ' ' or include the actual content to insert.",
+        ),
+      };
+    }
+
     // Verify ref range covers edit target
     if (rangeRef.start.line > 0) {
       if (checksumRef.startLine > rangeRef.start.line || checksumRef.endLine < rangeRef.end.line) {
@@ -262,6 +278,26 @@ export function validateEdits(edits: EditInput[], resolvedPath?: string): Valida
               `Re-read with trueline_read to get a ref covering the target lines.`,
           ),
         };
+      }
+    }
+
+    // Detect hash.line identifiers leaked into content.  LLMs sometimes confuse
+    // the addressing syntax ("zm.82") shown in trueline_read output with actual
+    // file content, writing it into the replacement text and corrupting the file.
+    // A line that is *only* a hash.line token is almost certainly a mistake.
+    // Warn rather than reject: the pattern can match legitimate content (e.g.
+    // "vs.20" as a version string), so we surface it as a post-edit warning.
+    if (edit.content !== "") {
+      const HASH_LINE_RE = /^[a-z]{2}\.\d+$/;
+      const contentLines = edit.content.split("\n");
+      const suspect = contentLines.filter((l) => HASH_LINE_RE.test(l.trim()));
+      if (suspect.length > 0) {
+        warnings.push(
+          `WARNING: content contains what looks like hash.line identifiers from trueline_read output: ` +
+            `${suspect.map((s) => `"${s.trim()}"`).join(", ")}. ` +
+            `These are addressing tags, not file content. ` +
+            `If this was unintentional, undo the edit and retry with only the actual text.`,
+        );
       }
     }
 
@@ -310,7 +346,7 @@ export function validateEdits(edits: EditInput[], resolvedPath?: string): Valida
     }
   }
 
-  return { ok: true, ops, checksumRefs };
+  return { ok: true, ops, checksumRefs, warnings };
 }
 
 // ==============================================================================
