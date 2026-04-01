@@ -174,8 +174,8 @@ type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
 /**
  * Validate edit inputs without reading file content.
  *
- * Performs range parsing, line-0 constraints, checksum-range coverage,
- * and overlap detection. File-content verification (checksum match,
+ * Performs range parsing, line-0 constraints, ref-range coverage,
+ * and overlap detection. File-content verification (hash match,
  * boundary hash match) is deferred to the streaming pass.
  */
 export function validateEdits(edits: EditInput[], resolvedPath?: string): ValidateEditsResult {
@@ -240,7 +240,7 @@ export function validateEdits(edits: EditInput[], resolvedPath?: string): Valida
       };
     }
 
-    // Verify checksum range covers edit target
+    // Verify ref range covers edit target
     if (rangeRef.start.line > 0) {
       if (checksumRef.startLine > rangeRef.start.line || checksumRef.endLine < rangeRef.end.line) {
         return {

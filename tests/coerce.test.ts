@@ -38,8 +38,8 @@ describe("coerceParams", () => {
       expect(coerceParams({ files: ["a.ts"] })).toEqual({ file_paths: ["a.ts"] });
     });
 
-    test("maps ref → compare_against", () => {
-      expect(coerceParams({ ref: "HEAD~1" })).toEqual({ compare_against: "HEAD~1" });
+    test("does NOT alias ref globally (first-class edit field)", () => {
+      expect(coerceParams({ ref: "R1" })).toEqual({ ref: "R1" });
     });
 
     test("canonical key wins when both provided", () => {
@@ -430,10 +430,10 @@ describe("coerceParams", () => {
       });
     });
 
-    test("realistic trueline_changes call with ref alias", () => {
+    test("ref is NOT aliased globally (it's a first-class edit field)", () => {
       expect(coerceParams({ file_paths: ["src/server.ts"], ref: "HEAD~1" })).toEqual({
         file_paths: ["src/server.ts"],
-        compare_against: "HEAD~1",
+        ref: "HEAD~1",
       });
     });
   });

@@ -239,7 +239,7 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
 
       const marker = line.isMatch && matchesEmitted < maxMatches ? "  ← match" : "";
       if (line.isMatch && marker !== "") matchesEmitted++;
-      parts.push(`${hashToLetters(line.hash)}.${line.lineNumber}\t${line.text}${marker}`);
+      parts.push(`${letters}.${line.lineNumber}	${line.text}${marker}`);
     }
 
     const hex = checksumHash.toString(16).padStart(8, "0");

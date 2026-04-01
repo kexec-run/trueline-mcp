@@ -173,8 +173,6 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
       }
 
       rangeLastLine = lineNumber;
-
-      rangeLastLine = lineNumber;
       rangeChecksumHash = foldHash(rangeChecksumHash, h);
       outputChunks.push(prefix, lineBytes, LF_BUF);
       outputLen += lineLen;
@@ -229,7 +227,6 @@ export async function handleRead(params: ReadParams): Promise<ToolResult> {
   outputChunks.push(hint);
   outputLen += hint.length;
 
-  // Populate cache for future unchanged-file checks (skip truncated reads —
   // Populate cache for future unchanged-file checks (skip truncated reads —
   // they don't cover the full requested range, so the refs are incomplete)
   if (!truncated && collectedRefs.length > 0) {

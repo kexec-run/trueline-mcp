@@ -11,8 +11,7 @@ const PARAM_ALIASES: Record<string, string> = {
   filePaths: "file_paths",
   files: "file_paths",
 
-  // compare_against (trueline_changes)
-  ref: "compare_against",
+  // compare_against (trueline_changes) — not ref, which is a first-class edit field
   base: "compare_against",
   branch: "compare_against",
   git_ref: "compare_against",
@@ -150,14 +149,14 @@ export function coerceParams(val: unknown): unknown {
     delete result.ref;
   }
 
-  // Coerce edit sub-objects: normalize checksums, ranges, and content.
+  // Coerce edit sub-objects: normalize refs, ranges, and content.
   if (Array.isArray(result.edits)) {
     for (const edit of result.edits) {
       if (typeof edit === "object" && edit !== null) {
         const e = edit as Record<string, unknown>;
 
         // Detect built-in Edit tool shape (old_string/new_string instead of
-        // range/checksum/content). Can't recover, but give a helpful error.
+        // range/ref/content). Can't recover, but give a helpful error.
         if (("old_string" in e || "new_string" in e) && !("range" in e)) {
           throw new Error(
             "Edit uses old_string/new_string format (from the built-in Edit tool). " +
