@@ -53,7 +53,10 @@ function parseHashLine(ref: string): LineRef {
     throw new Error(`Invalid hash.line reference "${ref}" — line 0 must use bare "0" with no hash`);
   }
   if (!/^[a-z]{2}$/.test(hash)) {
-    throw new Error(`Invalid hash in "${ref}" — must be exactly 2 lowercase letters`);
+    throw new Error(
+      `Invalid hash in "${ref}" — the part before the dot must be exactly 2 lowercase letters (e.g. "ab.${line}"). ` +
+        `Copy the hash.line reference from trueline_read or trueline_search output.`,
+    );
   }
 
   return { line, hash };

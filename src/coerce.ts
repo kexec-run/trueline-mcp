@@ -174,6 +174,12 @@ export function coerceParams(val: unknown): unknown {
         if (Array.isArray(e.content)) {
           e.content = (e.content as unknown[]).map(String).join("\n");
         }
+        // Strip a single trailing newline from content. LLMs commonly append
+        // \n as a line terminator, but split("\n") treats it as a separator,
+        // creating an unwanted empty line at the end.
+        if (typeof e.content === "string" && e.content.endsWith("\n")) {
+          e.content = e.content.slice(0, -1);
+        }
         // Normalize ref: strip whitespace
         if (typeof e.ref === "string") {
           e.ref = (e.ref as string).trim();

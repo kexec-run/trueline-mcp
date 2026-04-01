@@ -272,7 +272,8 @@ export async function streamingEdit(
   function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
     return (
       `hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}. ` +
-      `The correct hash.line reference is ${got}.${lineNumber} — copy it from trueline_read/trueline_search output`
+      `The correct hash.line reference is ${got}.${lineNumber}. ` +
+      `Your ref is still valid — retry the edit with the corrected hash prefix.`
     );
   }
 

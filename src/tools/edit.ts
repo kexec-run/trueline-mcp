@@ -142,7 +142,10 @@ function editSummary(ops: StreamEditOp[]): string {
 
       if (op.insertAfter) {
         const location = op.startLine === 0 ? "at start of file" : `after line ${op.startLine}`;
-        return `inserted ${lines} line${lines !== 1 ? "s" : ""} ${location}`;
+        const newStart = op.startLine + 1;
+        const newEnd = op.startLine + lines;
+        const rangeHint = lines === 1 ? `(now line ${newStart})` : `(now lines ${newStart}\u2013${newEnd})`;
+        return `inserted ${lines} line${lines !== 1 ? "s" : ""} ${location} ${rangeHint}`;
       }
 
       const span = op.endLine - op.startLine + 1;
