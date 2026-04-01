@@ -40,13 +40,6 @@ const PARTIAL_READ_FIELDS = ["offset", "limit", "start_line", "end_line"];
 // Files below this threshold are small enough for built-in tools.
 const LARGE_FILE_THRESHOLD = 15360; // 15KB
 
-// Token-cost estimation for Edit vs trueline_edit comparison.
-// Code averages ~3.5 characters per token across common languages.
-const CHARS_PER_TOKEN = 3.5;
-// Fixed MCP round-trip overhead for a trueline_edit call: tool schema,
-// parameters framing, response framing.
-const MCP_OVERHEAD_TOKENS = 300;
-
 /**
  * @param {string} toolName
  * @returns {string}
@@ -102,79 +95,6 @@ function formatSize(bytes) {
   return `${(bytes / 1024).toFixed(0)}KB`;
 }
 
-// Field names for old_string across platforms:
-//   Claude Code / Gemini CLI / OpenCode: old_string
-//   VS Code Copilot: oldString
-const OLD_STRING_FIELDS = ["old_string", "oldString"];
-
-/**
- * Check whether the tool input indicates a replace-all / multi-replace operation.
- *
- * Platform conventions:
- *   Claude Code / OpenCode: replace_all (boolean)
- *   Gemini CLI: expected_replacements (number > 1), allow_multiple (boolean)
- *   VS Code Copilot: separate multi_replace_string_in_file tool (handled by
- *     canonicalToolName mapping to MultiEdit, not here)
- *
- * @param {Record<string, unknown>} input
- * @returns {boolean}
- */
-function isReplaceAll(input) {
-  // Claude Code / OpenCode
-  if (input.replace_all === true) return true;
-
-  // Gemini CLI: expected_replacements > 1 means multiple occurrences
-  const er = input.expected_replacements;
-  if (typeof er === "number" && er > 1) return true;
-
-  // Gemini CLI: allow_multiple
-  if (input.allow_multiple === true) return true;
-
-  return false;
-}
-
-/**
- * Extract old_string from tool input, trying known field names.
- * @param {Record<string, unknown>} input
- * @returns {string | null}
- */
-function extractOldString(input) {
-  for (const field of OLD_STRING_FIELDS) {
-    const val = input[field];
-    if (typeof val === "string") return val;
-  }
-  return null;
-}
-
-/**
- * Estimate context tokens saved by using trueline_edit instead of built-in Edit.
- *
- * Built-in Edit sends old_string verbatim; trueline_edit replaces it with a
- * compact hash-verified range spec (~10 tokens). The savings are offset by
- * the fixed MCP round-trip overhead. When the tool replaces multiple
- * occurrences, trueline_edit needs one entry per occurrence, so Edit is
- * likely cheaper; we return 0.
- *
- * Handles field name differences across platforms (old_string, oldString,
- * replace_all, expected_replacements, allow_multiple).
- *
- * @param {Record<string, unknown> | undefined} toolInput
- * @returns {number} Estimated token savings (0 or negative means Edit is fine)
- */
-export function estimateEditTokenSavings(toolInput) {
-  if (!toolInput || typeof toolInput !== "object") return 0;
-
-  // Replace-all sends old_string once for N occurrences; trueline_edit would
-  // need N separate range-spec entries. Edit wins here.
-  if (isReplaceAll(toolInput)) return 0;
-
-  const oldStr = extractOldString(toolInput);
-  if (oldStr === null) return 0;
-
-  const oldTokens = oldStr.length / CHARS_PER_TOKEN;
-  return oldTokens - MCP_OVERHEAD_TOKENS;
-}
-
 /**
  * Route a pre-tool-use event.
  *
@@ -188,15 +108,9 @@ export function estimateEditTokenSavings(toolInput) {
  *   The MCP overhead of trueline_read isn't worth it on small files,
  *   but outline is still a better first step.
  *
- * - Edit/MultiEdit, costly old_string (replace_all=false, old_string tokens
- *   exceed MCP overhead): **advise** trueline_edit. The old_string content
- *   wastes more context than the MCP round-trip would cost.
- *
- * - Edit/MultiEdit, large file: **advise** trueline_search -> trueline_edit.
- *   We don't block because the agent may have already committed to an
- *   edit workflow; blocking mid-edit is more disruptive than a read redirect.
- *
- * - Edit/MultiEdit, small file, small old_string: **pass through** silently.
+ * - Edit/MultiEdit: **block** and redirect to trueline_search ->
+ *   trueline_edit. Hash-verified edits prevent stale-content mismatches
+ *   that built-in Edit can't detect.
  *
  * Returns null for silent approve, or { action, reason } for advise/block.
  *
@@ -275,37 +189,16 @@ export async function routePreToolUse(toolName, toolInput, canAccessFn) {
     };
   }
 
-  // Edit or MultiEdit: check token cost, then file size.
-  const tokenSavings = estimateEditTokenSavings(toolInput);
-  const needsTokenAdvice = tokenSavings > 0;
-  const needsFileSizeAdvice = fileSize >= LARGE_FILE_THRESHOLD;
-
-  if (!needsTokenAdvice && !needsFileSizeAdvice) return null;
-
+  // Edit or MultiEdit: block and redirect to trueline_search -> trueline_edit.
+  // Hash verification is the core value; always prefer it over built-in Edit.
   const [canRead, canWrite] = await Promise.all([canAccessFn(filePath, "Read"), canAccessFn(filePath, "Edit")]);
   if (!canRead || !canWrite) return null;
 
-  // Token-cost advisory takes priority: it's a concrete, quantifiable saving.
-  if (needsTokenAdvice) {
-    const saved = Math.round(tokenSavings);
-    return {
-      action: "advise",
-      reason:
-        `<trueline_advisory>old_string is ~${saved} tokens larger than the MCP round-trip cost. ` +
-        "trueline_search \u2192 trueline_edit replaces it with a compact hash reference, " +
-        "saving context window.</trueline_advisory>",
-    };
-  }
-
-  // Large file advisory: stale-content risk even with small old_string.
-  const size = formatSize(fileSize);
-
   return {
-    action: "advise",
+    action: "block",
     reason:
-      `<trueline_advisory>This file is ${size}. ` +
-      "Use trueline_search \u2192 trueline_edit for verified changes. " +
-      "Built-in Edit on large files risks stale-content matches; " +
-      "trueline_edit verifies hashes before writing.</trueline_advisory>",
+      "<trueline_redirect>Use trueline_search to find the target content, then trueline_edit to apply " +
+      "hash-verified changes. trueline_edit confirms content hasn't changed since you last read it, " +
+      "preventing stale-content mismatches that built-in Edit can't detect.</trueline_redirect>",
   };
 }

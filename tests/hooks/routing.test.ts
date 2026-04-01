@@ -2,7 +2,7 @@ import { describe, expect, test, beforeAll, afterAll } from "bun:test";
 import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { routePreToolUse, estimateEditTokenSavings, isPartialRead } from "../../hooks/core/routing.js";
+import { routePreToolUse, isPartialRead } from "../../hooks/core/routing.js";
 import { OUTLINEABLE_EXTENSIONS } from "../../src/outline/supported-extensions.js";
 import { supportedExtensions } from "../../src/outline/languages.js";
 
@@ -143,67 +143,25 @@ describe("routePreToolUse — partial Read pass-through", () => {
   });
 });
 
-describe("estimateEditTokenSavings", () => {
-  test("returns 0 for missing or non-object input", () => {
-    expect(estimateEditTokenSavings(undefined)).toBe(0);
-    expect(estimateEditTokenSavings(null as unknown as undefined)).toBe(0);
-  });
-
-  test("returns 0 when replace_all is true (Claude Code / OpenCode)", () => {
-    expect(estimateEditTokenSavings({ old_string: "x".repeat(2000), replace_all: true })).toBe(0);
-  });
-
-  test("returns 0 when expected_replacements > 1 (Gemini CLI)", () => {
-    expect(estimateEditTokenSavings({ old_string: "x".repeat(2000), expected_replacements: 3 })).toBe(0);
-  });
-
-  test("returns 0 when allow_multiple is true (Gemini CLI)", () => {
-    expect(estimateEditTokenSavings({ old_string: "x".repeat(2000), allow_multiple: true })).toBe(0);
-  });
-
-  test("does not treat expected_replacements=1 as replace-all", () => {
-    const savings = estimateEditTokenSavings({ old_string: "x".repeat(2000), expected_replacements: 1 });
-    expect(savings).toBeGreaterThan(0);
-  });
-
-  test("returns 0 when old_string is missing", () => {
-    expect(estimateEditTokenSavings({ new_string: "hello" })).toBe(0);
-  });
-
-  test("returns negative for small old_string (Edit is cheaper)", () => {
-    // 100 chars / 3.5 ≈ 29 tokens, well below 300 overhead
-    expect(estimateEditTokenSavings({ old_string: "x".repeat(100) })).toBeLessThan(0);
-  });
-
-  test("returns positive for large old_string (trueline_edit is cheaper)", () => {
-    // 2000 chars / 3.5 ≈ 571 tokens, minus 300 overhead ≈ 271 savings
-    const savings = estimateEditTokenSavings({ old_string: "x".repeat(2000) });
-    expect(savings).toBeGreaterThan(0);
-    expect(savings).toBeCloseTo(2000 / 3.5 - 300, 0);
-  });
-
-  test("handles VS Code Copilot camelCase field: oldString", () => {
-    const savings = estimateEditTokenSavings({ oldString: "x".repeat(2000) });
-    expect(savings).toBeGreaterThan(0);
-  });
-});
-
 describe("routePreToolUse — Edit routing", () => {
-  test("returns null (silent approve) for small files with small old_string", async () => {
+  test("blocks Edit on small files with small old_string", async () => {
     const result = await routePreToolUse(
       "Edit",
       { file_path: smallFile, old_string: "const x", new_string: "const y" },
       alwaysAccessible,
     );
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result!.action).toBe("block");
+    expect(result!.reason).toContain("trueline_edit");
   });
 
-  test("returns null (silent approve) for small files with no old_string", async () => {
+  test("blocks Edit on small files with no old_string", async () => {
     const result = await routePreToolUse("Edit", { file_path: smallFile }, alwaysAccessible);
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result!.action).toBe("block");
   });
 
-  test("advises on small files when old_string is costly", async () => {
+  test("blocks Edit on small files when old_string is costly", async () => {
     const bigOldString = "x\n".repeat(800); // ~1600 chars ≈ 457 tokens > 300 overhead
     const result = await routePreToolUse(
       "Edit",
@@ -211,46 +169,32 @@ describe("routePreToolUse — Edit routing", () => {
       alwaysAccessible,
     );
     expect(result).not.toBeNull();
-    expect(result!.action).toBe("advise");
-    expect(result!.reason).toContain("old_string");
-    expect(result!.reason).toContain("tokens");
+    expect(result!.action).toBe("block");
+    expect(result!.reason).toContain("trueline_edit");
   });
 
-  test("skips token advisory when replace_all is true even with large old_string", async () => {
+  test("blocks Edit even when replace_all is true", async () => {
     const bigOldString = "x\n".repeat(800);
     const result = await routePreToolUse(
       "Edit",
       { file_path: smallFile, old_string: bigOldString, new_string: "y", replace_all: true },
       alwaysAccessible,
     );
-    // Small file + replace_all → no token advice, no file-size advice → null
-    expect(result).toBeNull();
+    expect(result).not.toBeNull();
+    expect(result!.action).toBe("block");
   });
 
-  test("returns advise for large files on Edit", async () => {
+  test("blocks Edit on large files", async () => {
     const result = await routePreToolUse("Edit", { file_path: largeFile }, alwaysAccessible);
     expect(result).not.toBeNull();
-    expect(result!.action).toBe("advise");
+    expect(result!.action).toBe("block");
     expect(result!.reason).toContain("trueline");
   });
 
-  test("token advisory takes priority over file-size advisory on large files", async () => {
-    const bigOldString = "x\n".repeat(800);
-    const result = await routePreToolUse(
-      "Edit",
-      { file_path: largeFile, old_string: bigOldString, new_string: "replaced" },
-      alwaysAccessible,
-    );
-    expect(result).not.toBeNull();
-    expect(result!.action).toBe("advise");
-    // Should mention token savings, not file size
-    expect(result!.reason).toContain("old_string");
-  });
-
-  test("returns advise for MultiEdit on large files", async () => {
+  test("blocks MultiEdit on large files", async () => {
     const result = await routePreToolUse("MultiEdit", { file_path: largeFile }, alwaysAccessible);
     expect(result).not.toBeNull();
-    expect(result!.action).toBe("advise");
+    expect(result!.action).toBe("block");
   });
 
   test("returns null for Edit when trueline cannot access the file", async () => {
@@ -258,53 +202,47 @@ describe("routePreToolUse — Edit routing", () => {
     expect(result).toBeNull();
   });
 
-  test("returns null for costly old_string when trueline cannot access the file", async () => {
-    const bigOldString = "x\n".repeat(800);
+  test("returns null for Edit on small file when trueline cannot access the file", async () => {
     const result = await routePreToolUse(
       "Edit",
-      { file_path: smallFile, old_string: bigOldString, new_string: "replaced" },
+      { file_path: smallFile, old_string: "const x", new_string: "const y" },
       neverAccessible,
     );
     expect(result).toBeNull();
   });
 
-  test("advises for VS Code Copilot replace_string_in_file with costly oldString", async () => {
-    const bigOldString = "x\n".repeat(800);
+  test("blocks VS Code Copilot replace_string_in_file", async () => {
     const result = await routePreToolUse(
       "replace_string_in_file",
-      { file_path: smallFile, oldString: bigOldString, newString: "replaced" },
+      { file_path: smallFile, oldString: "x", newString: "y" },
       alwaysAccessible,
     );
     expect(result).not.toBeNull();
-    expect(result!.action).toBe("advise");
-    expect(result!.reason).toContain("old_string");
+    expect(result!.action).toBe("block");
   });
 
-  test("advises for VS Code Copilot multi_replace_string_in_file on large files", async () => {
+  test("blocks VS Code Copilot multi_replace_string_in_file", async () => {
     const result = await routePreToolUse("multi_replace_string_in_file", { file_path: largeFile }, alwaysAccessible);
     expect(result).not.toBeNull();
-    expect(result!.action).toBe("advise");
+    expect(result!.action).toBe("block");
   });
 
-  test("advises for Gemini CLI edit_file with costly old_string", async () => {
-    const bigOldString = "x\n".repeat(800);
+  test("blocks Gemini CLI edit_file", async () => {
     const result = await routePreToolUse(
       "edit_file",
-      { file_path: smallFile, old_string: bigOldString, new_string: "replaced" },
+      { file_path: smallFile, old_string: "x", new_string: "y" },
       alwaysAccessible,
     );
     expect(result).not.toBeNull();
-    expect(result!.action).toBe("advise");
+    expect(result!.action).toBe("block");
   });
 
-  test("skips token advisory for Gemini CLI edit_file with expected_replacements > 1", async () => {
-    const bigOldString = "x\n".repeat(800);
+  test("returns null for Gemini CLI edit_file when trueline cannot access", async () => {
     const result = await routePreToolUse(
       "edit_file",
-      { file_path: smallFile, old_string: bigOldString, new_string: "y", expected_replacements: 5 },
-      alwaysAccessible,
+      { file_path: smallFile, old_string: "x", new_string: "y" },
+      neverAccessible,
     );
-    // Small file + replace-all → no token advice, no file-size advice → null
     expect(result).toBeNull();
   });
 });

@@ -94,30 +94,30 @@ describe("PreToolUse hook — Read routing", () => {
 });
 
 describe("PreToolUse hook — Edit routing", () => {
-  test("silently approves Edit for small files", async () => {
+  test("blocks Edit for small files", async () => {
     const result = await processHookEvent({
       tool_name: "Edit",
       tool_input: { file_path: smallFile, old_string: "x", new_string: "y" },
     });
-    expect(result.decision).toBe("approve");
-    expect(result.reason).toBeUndefined();
+    expect(result.decision).toBe("block");
+    expect(result.reason).toContain("trueline_edit");
   });
 
-  test("advises trueline for Edit on large files", async () => {
+  test("blocks Edit on large files", async () => {
     const result = await processHookEvent({
       tool_name: "Edit",
       tool_input: { file_path: largeFile, old_string: "x", new_string: "y" },
     });
-    expect(result.decision).toBe("approve");
+    expect(result.decision).toBe("block");
     expect(result.reason).toContain("trueline");
   });
 
-  test("advises trueline for MultiEdit on large files", async () => {
+  test("blocks MultiEdit on large files", async () => {
     const result = await processHookEvent({
       tool_name: "MultiEdit",
       tool_input: { file_path: largeFile, edits: [] },
     });
-    expect(result.decision).toBe("approve");
+    expect(result.decision).toBe("block");
     expect(result.reason).toContain("trueline");
   });
 
@@ -135,8 +135,7 @@ describe("PreToolUse hook — Edit routing", () => {
     mkdirSync(claudeDir, { recursive: true });
     const settingsPath = join(claudeDir, "settings.json");
     const secretFile = join(projectDir, "data.secret");
-    // Make it large enough to trigger advisory
-    writeFileSync(secretFile, "secret data\n".repeat(2000));
+    writeFileSync(secretFile, "secret data\n".repeat(200));
     writeFileSync(settingsPath, JSON.stringify({ permissions: { deny: ["Read(**/*.secret)"] } }));
 
     try {
@@ -144,7 +143,7 @@ describe("PreToolUse hook — Edit routing", () => {
         tool_name: "Edit",
         tool_input: { file_path: secretFile, old_string: "secret", new_string: "public" },
       });
-      // trueline can't read .secret files, so no advisory
+      // trueline can't read .secret files, so no block
       expect(result.decision).toBe("approve");
       expect(result.reason).toBeUndefined();
     } finally {
@@ -158,8 +157,7 @@ describe("PreToolUse hook — Edit routing", () => {
     mkdirSync(claudeDir, { recursive: true });
     const settingsPath = join(claudeDir, "settings.json");
     const lockedFile = join(projectDir, "locked.cfg");
-    // Make it large enough to trigger advisory
-    writeFileSync(lockedFile, "config\n".repeat(3000));
+    writeFileSync(lockedFile, "config\n".repeat(200));
     writeFileSync(settingsPath, JSON.stringify({ permissions: { deny: ["Edit(**/*.cfg)"] } }));
 
     try {
@@ -167,7 +165,7 @@ describe("PreToolUse hook — Edit routing", () => {
         tool_name: "Edit",
         tool_input: { file_path: lockedFile, old_string: "config", new_string: "updated" },
       });
-      // trueline can't edit .cfg files, so no advisory
+      // trueline can't edit .cfg files, so no block
       expect(result.decision).toBe("approve");
       expect(result.reason).toBeUndefined();
     } finally {
