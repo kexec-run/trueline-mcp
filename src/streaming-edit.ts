@@ -31,9 +31,10 @@ import {
   formatChecksum,
   hashToLetters,
 } from "./hash.ts";
-import { EMPTY_BUF, LF_BUF, splitLines } from "./line-splitter.ts";
+import { EMPTY_BUF, LF_BUF } from "./line-splitter.ts";
+import { transcodedLines, bomBytes, encodeBuffer, encodeString, type BOMInfo } from "./encoding.ts";
 import type { DiffCollector } from "./diff-collector.ts";
-import type { ChecksumRef } from "./parse.ts";
+import { BARE_LINE_HASH, type ChecksumRef } from "./parse.ts";
 
 // ==============================================================================
 // StreamEditOp — the validated, parsed representation of a single edit
@@ -46,6 +47,8 @@ export interface StreamEditOp {
   insertAfter: boolean;
   startHash: string;
   endHash: string;
+  /** Populated during streaming with the original content of deleted lines. */
+  deletedContent?: string[];
 }
 
 // ==============================================================================
@@ -53,7 +56,7 @@ export interface StreamEditOp {
 // ==============================================================================
 
 type StreamingEditResult =
-  | { ok: true; newChecksum: string; changed: boolean; tmpPath?: string }
+  | { ok: true; newChecksum: string; newLineCount: number; newHash: string; changed: boolean; tmpPath?: string }
   | { ok: false; error: string };
 
 function buffersEqual(a: Buffer[], b: Buffer[]): boolean {
@@ -79,6 +82,7 @@ export async function streamingEdit(
   dryRun = false,
   encoding: BufferEncoding = "utf-8",
   collector?: DiffCollector,
+  fileBomInfo?: BOMInfo,
 ): Promise<StreamingEditResult> {
   // ---- Sort ops ascending by startLine, insert_after after replace at same line ----
   const indexed = ops.map((op, i) => ({ op, i }));
@@ -109,6 +113,20 @@ export async function streamingEdit(
   }));
   let csIdx = 0;
 
+  // ---- Encoding ----
+  const isUtf16 = fileBomInfo?.encoding === "utf-16le" || fileBomInfo?.encoding === "utf-16be";
+  const targetEncoding = fileBomInfo?.encoding ?? "utf-8";
+
+  /** Encode a UTF-8 Buffer for the target file encoding. Identity for UTF-8. */
+  function encodeForWrite(buf: Buffer): Buffer {
+    return isUtf16 ? encodeBuffer(buf, targetEncoding) : buf;
+  }
+
+  /** Encode a UTF-8 EOL Buffer for the target file encoding. */
+  function encodeEolForWrite(eol: Buffer): Buffer {
+    return isUtf16 ? encodeString(eol.toString("utf-8"), targetEncoding) : eol;
+  }
+
   // ---- Temp file setup ----
   const dir = dirname(resolvedPath);
   const tmpName = `.trueline-tmp-${randomBytes(6).toString("hex")}`;
@@ -121,6 +139,14 @@ export async function streamingEdit(
   const WRITE_BUF_SIZE = 65536;
   const writeBuf = Buffer.allocUnsafe(WRITE_BUF_SIZE);
   let writeBufPos = 0;
+
+  // Write BOM if the original file had one
+  if (fileBomInfo?.hasBOM) {
+    const bom = bomBytes(fileBomInfo);
+    if (bom.length > 0) {
+      await fd.write(bom, 0, bom.length);
+    }
+  }
 
   async function flushWriteBuf(): Promise<void> {
     if (writeBufPos > 0) {
@@ -163,8 +189,8 @@ export async function streamingEdit(
 
   async function flushPending(): Promise<void> {
     if (pendingWrite !== null) {
-      await writeBytes(pendingWrite);
-      await writeBytes(pendingEol);
+      await writeBytes(encodeForWrite(pendingWrite));
+      await writeBytes(encodeEolForWrite(pendingEol));
       pendingWrite = null;
     }
   }
@@ -212,6 +238,9 @@ export async function streamingEdit(
   async function writeReplaceOrOriginal(op: StreamEditOp, origBytes: Buffer[], origEols?: Buffer[]): Promise<void> {
     if (op.content.length !== origBytes.length) {
       contentChanged = true;
+      if (op.content.length === 0) {
+        op.deletedContent = origBytes.map((buf) => buf.toString(encoding));
+      }
       for (const s of op.content) await enqueueString(s);
       if (collector) {
         for (const buf of origBytes) collector.delete(buf.toString(encoding));
@@ -241,8 +270,23 @@ export async function streamingEdit(
     return outputLineCount > 0 ? formatChecksum(1, outputLineCount, outputChecksumAcc) : EMPTY_FILE_CHECKSUM;
   }
 
+  function outputHashHex(): string {
+    return outputChecksumAcc.toString(16).padStart(8, "0");
+  }
+
   function hashMismatchMsg(lineNumber: number, expected: string, got: string): string {
-    return `hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}`;
+    if (expected === BARE_LINE_HASH) {
+      return (
+        `wrong hash prefix for line ${lineNumber}. ` +
+        `The correct hash.line reference is ${got}.${lineNumber}. ` +
+        `Your ref is still valid \u2014 retry the edit with ${got}.${lineNumber}.`
+      );
+    }
+    return (
+      `hash mismatch at line ${lineNumber}: expected ${expected}, got ${got}. ` +
+      `The correct hash.line reference is ${got}.${lineNumber}. ` +
+      `Your ref is still valid \u2014 retry the edit with the corrected hash prefix.`
+    );
   }
 
   // ---- Handle line-0 insert_after (prepend) before streaming ----
@@ -257,8 +301,11 @@ export async function streamingEdit(
   }
 
   // ---- Stream source file ----
+  // transcodedLines handles BOM stripping and UTF-16→UTF-8 transcoding.
+  // After this point, lineBytes are always UTF-8 regardless of original encoding.
+  const transcoded = await transcodedLines(resolvedPath, { detectBinary: !isUtf16 });
   try {
-    for await (const { lineBytes, eolBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: true })) {
+    for await (const { lineBytes, eolBytes, lineNumber } of transcoded.lines) {
       totalLines = lineNumber;
       lastEolBytes = eolBytes;
 
@@ -406,10 +453,10 @@ export async function streamingEdit(
   // EOL based on whether the original file had a trailing newline.
   try {
     if (pendingWrite !== null) {
-      await writeBytes(pendingWrite);
+      await writeBytes(encodeForWrite(pendingWrite));
       // If the last source line had a non-empty eolBytes, the file had a trailing newline
       if (lastEolBytes.length > 0) {
-        await writeBytes(detectedEol);
+        await writeBytes(encodeEolForWrite(detectedEol));
       }
     }
   } catch (err) {
@@ -465,7 +512,10 @@ export async function streamingEdit(
 
       const base =
         `${resolvedPath}: checksum mismatch for lines ${ref.startLine}\u2013${ref.endLine}: ` +
-        `expected ${expected}, got ${actual}. File changed since last read.`;
+        `expected ${expected}, got ${actual}. File changed since last read.` +
+        `\n\nYour ref is stale \u2014 the file was modified after the ref was issued. ` +
+        `Re-read with trueline_read to get a fresh ref. ` +
+        `A wider ref from a prior read (covering more lines) is valid for editing any sub-range within it.`;
 
       if (minLine !== Infinity) {
         return {
@@ -489,7 +539,13 @@ export async function streamingEdit(
   // ---- No-op: skip write if nothing changed ----
   if (!contentChanged) {
     await cleanupTmp();
-    return { ok: true, newChecksum: outputChecksumStr(), changed: false };
+    return {
+      ok: true,
+      newChecksum: outputChecksumStr(),
+      newLineCount: outputLineCount,
+      newHash: outputHashHex(),
+      changed: false,
+    };
   }
 
   // ---- Atomic rename with mtime check ----
@@ -525,6 +581,8 @@ export async function streamingEdit(
   return {
     ok: true,
     newChecksum: outputChecksumStr(),
+    newLineCount: outputLineCount,
+    newHash: outputHashHex(),
     changed: true,
     ...(dryRun ? { tmpPath } : {}),
   };

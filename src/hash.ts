@@ -95,9 +95,19 @@ export function foldHash(accumulator: number, h: number): number {
   return accumulator;
 }
 
-/** Format a checksum as `"<start>-<end>:<8hex>"`. */
-export function formatChecksum(startLine: number, endLine: number, hash: number): string {
-  return `${startLine}-${endLine}:${hash.toString(16).padStart(8, "0")}`;
+/** Format a checksum as `"<start>-<end>:<8hex>"`, optionally with hash letters. */
+export function formatChecksum(
+  startLine: number,
+  endLine: number,
+  hash: number,
+  startLetters?: string,
+  endLetters?: string,
+): string {
+  const hex = hash.toString(16).padStart(8, "0");
+  if (startLetters && endLetters) {
+    return `${startLetters}.${startLine}-${endLetters}.${endLine}:${hex}`;
+  }
+  return `${startLine}-${endLine}:${hex}`;
 }
 
 /**
@@ -121,5 +131,9 @@ const LETTER_TABLE: string[] = /* @__PURE__ */ (() => {
  * Map an FNV-1a hash to a two-character tag (676 possible values).
  */
 export function hashToLetters(h: number): string {
-  return LETTER_TABLE[((h >>> 0) % 26) * 26 + (((h >>> 8) >>> 0) % 26)];
+  // XOR-fold upper and lower 16 bits to decorrelate the two characters.
+  // Without this, FNV-1a's adjacent-byte correlation causes h%26 and
+  // (h>>>8)%26 to cluster, using only ~50% of the 676-tag space.
+  const folded = ((h >>> 16) ^ (h & 0xffff)) >>> 0;
+  return LETTER_TABLE[(folded % 26) * 26 + (((folded >>> 8) >>> 0) % 26)];
 }

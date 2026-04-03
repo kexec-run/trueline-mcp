@@ -1,6 +1,6 @@
 {
   "name": "trueline-mcp",
-  "version": "2.8.1",
+  "version": "2.9.0",
   "type": "module",
   "description": "Truth-verified file editing for AI coding agents via MCP",
   "license": "Apache-2.0",
@@ -49,7 +49,6 @@
     "benchmark": "bun run benchmarks/perf-benchmark.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.26.0",
     "tree-sitter-wasms": "0.1.13",
     "web-tree-sitter": "0.24.7",
     "zod": "^3.25.0"

@@ -10,10 +10,14 @@
 // The file is never loaded into memory as a whole.
 // ==============================================================================
 
+import { open } from "node:fs/promises";
 import { unlink } from "node:fs/promises";
 import { relative } from "node:path";
 import { DiffCollector } from "../diff-collector.ts";
+import { detectBOM } from "../encoding.ts";
 import { streamingEdit } from "../streaming-edit.ts";
+import { fnv1aHash, hashToLetters } from "../hash.ts";
+import { adjustRefsAfterEdit, issueRef, type EditRegion } from "../ref-store.ts";
 import { type EditInput, type StreamEditOp, validateEdits, validateEncoding, validatePath } from "./shared.ts";
 import { errorResult, type ToolResult, textResult } from "./types.ts";
 
@@ -44,12 +48,31 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
 
   const { resolvedPath, mtimeMs } = validated;
 
-  const built = validateEdits(edits);
+  const built = validateEdits(edits, resolvedPath);
   if (!built.ok) return built.error;
+
+  // Detect BOM to pass encoding info through to streamingEdit for round-trip fidelity
+  const fd = await open(resolvedPath, "r");
+  const bomBuf = Buffer.alloc(4);
+  try {
+    await fd.read(bomBuf, 0, 4);
+  } finally {
+    await fd.close();
+  }
+  const bomInfo = detectBOM(bomBuf);
 
   if (dry_run) {
     const collector = new DiffCollector();
-    const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, true, enc, collector);
+    const result = await streamingEdit(
+      resolvedPath,
+      built.ops,
+      built.checksumRefs,
+      mtimeMs,
+      true,
+      enc,
+      collector,
+      bomInfo,
+    );
 
     if (!result.ok) return errorResult(result.error);
     if (!result.changed) return textResult("(no changes)");
@@ -68,22 +91,45 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
     return textResult(diff);
   }
 
-  const result = await streamingEdit(resolvedPath, built.ops, built.checksumRefs, mtimeMs, false, enc);
+  const result = await streamingEdit(
+    resolvedPath,
+    built.ops,
+    built.checksumRefs,
+    mtimeMs,
+    false,
+    enc,
+    undefined,
+    bomInfo,
+  );
 
   if (!result.ok) {
     return errorResult(result.error);
   }
 
+  // Adjust surviving refs: invalidate those overlapping edits, shift those after.
+  const regions: EditRegion[] = built.ops.map((op) => ({
+    startLine: op.startLine,
+    endLine: op.endLine,
+    insertAfter: op.insertAfter,
+    newLineCount: op.content.length,
+  }));
+  adjustRefsAfterEdit(resolvedPath, regions);
+  const newRef =
+    result.newLineCount > 0
+      ? issueRef(resolvedPath, 1, result.newLineCount, result.newHash)
+      : issueRef(resolvedPath, 0, 0, "00000000");
+
   const summary = editSummary(built.ops);
+  const warn = built.warnings.length > 0 ? `\n\n${built.warnings.join("\n")}` : "";
 
   if (!result.changed) {
     return textResult(
-      `Edit produced no changes \u2014 file not written.\n\n${summary}\nchecksum: ${result.newChecksum}`,
+      `Edit produced no changes \u2014 file not written.\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})${warn}`,
     );
   }
 
   return textResult(
-    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nchecksum: ${result.newChecksum}`,
+    `Edit applied. (${(performance.now() - t0).toFixed(0)}ms)\n\n${summary}\nref: ${newRef} (lines 1-${result.newLineCount})${warn}`,
   );
 }
 
@@ -92,13 +138,26 @@ export async function handleEdit(params: EditParams): Promise<ToolResult> {
 // ==============================================================================
 
 function editSummary(ops: StreamEditOp[]): string {
+  let shift = 0;
   return ops
     .map((op) => {
       const lines = op.content.length;
 
       if (op.insertAfter) {
         const location = op.startLine === 0 ? "at start of file" : `after line ${op.startLine}`;
-        return `inserted ${lines} line${lines !== 1 ? "s" : ""} ${location}`;
+        if (lines === 0) {
+          // Shouldn't reach here (validateEdits rejects empty insert_after),
+          // but guard against crash in case it does.
+          return `inserted 0 lines ${location}`;
+        }
+        const newStart = op.startLine + 1 + shift;
+        const newEnd = op.startLine + lines + shift;
+        const rangeHint =
+          lines === 1
+            ? `(now ${hl(op.content[0], newStart)})`
+            : `(now ${hl(op.content[0], newStart)}\u2013${hl(op.content[lines - 1], newEnd)})`;
+        shift += lines;
+        return `inserted ${lines} line${lines !== 1 ? "s" : ""} ${location} ${rangeHint}`;
       }
 
       const span = op.endLine - op.startLine + 1;
@@ -106,12 +165,39 @@ function editSummary(ops: StreamEditOp[]): string {
         op.startLine === op.endLine ? `line ${op.startLine}` : `lines ${op.startLine}\u2013${op.endLine}`;
 
       if (lines === 0) {
-        return `deleted ${rangeStr} (${span} line${span !== 1 ? "s" : ""})`;
+        shift -= span;
+        const preview = op.deletedContent ? `: ${truncatePreview(op.deletedContent)}` : "";
+        return `deleted ${rangeStr} (${span} line${span !== 1 ? "s" : ""})${preview}`;
       }
 
+      const newStart = op.startLine + shift;
+      const newEnd = op.startLine + lines - 1 + shift;
       const delta = lines - span;
       const sign = delta > 0 ? "+" : delta < 0 ? "" : "\u00b1";
-      return `replaced ${rangeStr} (${span}\u2192${lines} line${lines !== 1 ? "s" : ""}, ${sign}${delta})`;
+      const hint =
+        lines === 1
+          ? `now ${hl(op.content[0], newStart)}`
+          : `now ${hl(op.content[0], newStart)}\u2013${hl(op.content[lines - 1], newEnd)}`;
+      shift += delta;
+      return `replaced ${rangeStr} (${span}\u2192${lines} line${lines !== 1 ? "s" : ""}, ${sign}${delta}, ${hint})`;
     })
     .join("\n");
+}
+
+/** Format a hash.line reference for a content string at a given line number. */
+function hl(content: string, lineNumber: number): string {
+  return `${hashToLetters(fnv1aHash(content))}.${lineNumber}`;
+}
+
+/** Truncated preview of deleted content for the edit summary. */
+function truncatePreview(lines: string[]): string {
+  const MAX = 80;
+  let result = "";
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0) result += "\\n";
+    const remaining = MAX - result.length;
+    if (remaining <= 0) return `"${result}\u2026"`;
+    result += lines[i].length <= remaining ? lines[i] : lines[i].slice(0, remaining);
+  }
+  return result.length > MAX ? `"${result.slice(0, MAX)}\u2026"` : `"${result}"`;
 }

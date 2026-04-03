@@ -7,8 +7,9 @@
  * Uses a single-pass sliding window so memory is O(contextLines) instead
  * of O(file_size). Decodes each line to a string exactly once.
  */
-import { splitLines } from "../line-splitter.ts";
-import { fnv1aHashBytes, hashToLetters, foldHash, FNV_OFFSET_BASIS, formatChecksum } from "../hash.ts";
+import { transcodedLines } from "../encoding.ts";
+import { fnv1aHashBytes, hashToLetters, foldHash, FNV_OFFSET_BASIS } from "../hash.ts";
+import { issueRef } from "../ref-store.ts";
 import { binaryFileError, isBinaryError, validatePath } from "./shared.ts";
 import { errorResult, textResult, type ToolResult } from "./types.ts";
 
@@ -110,7 +111,8 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
   let postLimitCapped = false;
 
   try {
-    for await (const { lineBytes, lineNumber } of splitLines(resolvedPath, { detectBinary: true })) {
+    const transcoded = await transcodedLines(resolvedPath, { detectBinary: true });
+    for await (const { lineBytes, lineNumber } of transcoded.lines) {
       if (done) {
         // Count remaining matches up to the scan cap
         postLimitScanned++;
@@ -228,17 +230,22 @@ export async function handleSearch(params: SearchParams): Promise<ToolResult> {
     if (i > 0) parts.push("");
 
     for (const line of window.lines) {
-      if (firstLine === 0) firstLine = line.lineNumber;
+      const letters = hashToLetters(line.hash);
+      if (firstLine === 0) {
+        firstLine = line.lineNumber;
+      }
       lastLine = line.lineNumber;
       checksumHash = foldHash(checksumHash, line.hash);
 
       const marker = line.isMatch && matchesEmitted < maxMatches ? "  ← match" : "";
       if (line.isMatch && marker !== "") matchesEmitted++;
-      parts.push(`${hashToLetters(line.hash)}.${line.lineNumber}\t${line.text}${marker}`);
+      parts.push(`${letters}.${line.lineNumber}	${line.text}${marker}`);
     }
 
+    const hex = checksumHash.toString(16).padStart(8, "0");
+    const refId = issueRef(resolvedPath, firstLine, lastLine, hex);
     parts.push("");
-    parts.push(`checksum: ${formatChecksum(firstLine, lastLine, checksumHash)}`);
+    parts.push(`ref: ${refId} (lines ${firstLine}-${lastLine})`);
   }
 
   // Truncation notice

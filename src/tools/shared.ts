@@ -1,6 +1,8 @@
 import { realpath, stat } from "node:fs/promises";
+import { statSync } from "node:fs";
 import { resolve, sep } from "node:path";
-import { type ChecksumRef, parseChecksum, parseRange } from "../parse.ts";
+import { type ChecksumRef, parseRange } from "../parse.ts";
+import { refToChecksumRef, resolveRef } from "../ref-store.ts";
 import { evaluateFilePath, readToolDenyPatterns } from "../security.js";
 import { errorResult, type ToolResult } from "./types.ts";
 
@@ -9,9 +11,10 @@ import { errorResult, type ToolResult } from "./types.ts";
 // ==============================================================================
 
 export interface EditInput {
-  checksum: string;
+  ref: string;
   range: string;
   content: string;
+  action?: "replace" | "insert_after";
 }
 
 // ==============================================================================
@@ -165,46 +168,136 @@ type ValidateEditsOk = {
   ok: true;
   ops: StreamEditOp[];
   checksumRefs: ChecksumRef[];
+  warnings: string[];
 };
 type ValidateEditsErr = { ok: false; error: ToolResult };
 type ValidateEditsResult = ValidateEditsOk | ValidateEditsErr;
 
+// On Windows, async realpath() and realpathSync() may disagree on 8.3 short
+// names (e.g. RUNNER~1 vs runneradmin). Compare by inode to handle this.
+function sameFile(a: string, b: string): boolean {
+  if (process.platform !== "win32") return false;
+  try {
+    const sa = statSync(a);
+    const sb = statSync(b);
+    return sa.dev === sb.dev && sa.ino === sb.ino && sa.ino !== 0;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Validate edit inputs without reading file content.
  *
- * Performs range parsing, line-0 constraints, checksum-range coverage,
- * and overlap detection. File-content verification (checksum match,
+ * Performs range parsing, line-0 constraints, ref-range coverage,
+ * and overlap detection. File-content verification (hash match,
  * boundary hash match) is deferred to the streaming pass.
  */
-export function validateEdits(edits: EditInput[]): ValidateEditsResult {
+export function validateEdits(edits: EditInput[], resolvedPath?: string): ValidateEditsResult {
   const ops: StreamEditOp[] = [];
   const checksumRefMap = new Map<string, ChecksumRef>();
+  const warnings: string[] = [];
 
   for (const edit of edits) {
-    const checksumRef = parseChecksum(edit.checksum);
-    checksumRefMap.set(edit.checksum, checksumRef);
+    let refEntry: ReturnType<typeof resolveRef>;
+    try {
+      refEntry = resolveRef(edit.ref);
+    } catch (err) {
+      return { ok: false, error: errorResult((err as Error).message) };
+    }
+    const checksumRef = refToChecksumRef(refEntry);
+    checksumRefMap.set(edit.ref, checksumRef);
 
-    const rangeRef = parseRange(edit.range);
-
-    // line 0 only valid for insert-after (encoded as + prefix in range)
-    if (rangeRef.start.line === 0 && !rangeRef.insertAfter) {
+    // Cross-file check: ensure the ref was issued for the file being edited.
+    // Without this, an LLM could accidentally use a ref from file A to edit file B.
+    if (resolvedPath && refEntry.filePath !== resolvedPath && !sameFile(refEntry.filePath, resolvedPath)) {
       return {
         ok: false,
-        error: errorResult("range starting at line 0 requires insert-after (use +0: prefix)"),
+        error: errorResult(
+          `Ref ${edit.ref} was issued for a different file (${refEntry.filePath}), ` +
+            `not the file being edited (${resolvedPath}). ` +
+            `Use a ref from trueline_read or trueline_search on the target file.`,
+        ),
       };
     }
 
-    // Verify checksum range covers edit target
+    let rangeRef: ReturnType<typeof parseRange>;
+    try {
+      rangeRef = parseRange(edit.range);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const hint = ` Your ref ${edit.ref} covers lines ${checksumRef.startLine}\u2013${checksumRef.endLine}.`;
+      throw new Error(msg + hint);
+    }
+
+    // Explicit action field takes precedence over + prefix in range.
+    // This makes intent unambiguous for LLMs that forget the + prefix.
+    if (edit.action === "insert_after") {
+      if (rangeRef.start.line !== rangeRef.end.line) {
+        return {
+          ok: false,
+          error: errorResult('action "insert_after" requires a single-line range, not a multi-line range'),
+        };
+      }
+      rangeRef.insertAfter = true;
+    } else if (edit.action === "replace") {
+      rangeRef.insertAfter = false;
+    }
+    // If action is omitted, parseRange's + prefix detection applies.
+
+    // line 0 only valid for insert-after
+    if (rangeRef.start.line === 0 && !rangeRef.insertAfter) {
+      return {
+        ok: false,
+        error: errorResult('range starting at line 0 requires insert-after (use action: "insert_after" or +0 prefix)'),
+      };
+    }
+
+    // Reject insert_after with empty content — inserting zero lines is a no-op
+    // that likely signals the LLM confused content format (e.g. sent "\n" which
+    // got stripped to "").  Rejecting early prevents a crash in editSummary and
+    // gives the LLM a chance to correct course.
+    if (rangeRef.insertAfter && edit.content === "") {
+      return {
+        ok: false,
+        error: errorResult(
+          "insert_after with empty content would insert zero lines (no-op). " +
+            "To insert a blank line, use content: ' ' or include the actual content to insert.",
+        ),
+      };
+    }
+
+    // Verify ref range covers edit target
     if (rangeRef.start.line > 0) {
       if (checksumRef.startLine > rangeRef.start.line || checksumRef.endLine < rangeRef.end.line) {
         return {
           ok: false,
           error: errorResult(
-            `Checksum range ${checksumRef.startLine}-${checksumRef.endLine} does not cover ` +
+            `Ref ${edit.ref} covers lines ${checksumRef.startLine}-${checksumRef.endLine}, which does not cover ` +
               `edit range ${rangeRef.start.line}-${rangeRef.end.line}. ` +
-              `Re-read with trueline_read to get a checksum covering the target lines.`,
+              `Re-read with trueline_read to get a ref covering the target lines.`,
           ),
         };
+      }
+    }
+
+    // Detect hash.line identifiers leaked into content.  LLMs sometimes confuse
+    // the addressing syntax ("zm.82") shown in trueline_read output with actual
+    // file content, writing it into the replacement text and corrupting the file.
+    // A line that is *only* a hash.line token is almost certainly a mistake.
+    // Warn rather than reject: the pattern can match legitimate content (e.g.
+    // "vs.20" as a version string), so we surface it as a post-edit warning.
+    if (edit.content !== "") {
+      const HASH_LINE_RE = /^[a-z]{2}\.\d+$/;
+      const contentLines = edit.content.split("\n");
+      const suspect = contentLines.filter((l) => HASH_LINE_RE.test(l.trim()));
+      if (suspect.length > 0) {
+        warnings.push(
+          `WARNING: content contains what looks like hash.line identifiers from trueline_read output: ` +
+            `${suspect.map((s) => `"${s.trim()}"`).join(", ")}. ` +
+            `These are addressing tags, not file content. ` +
+            `If this was unintentional, undo the edit and retry with only the actual text.`,
+        );
       }
     }
 
@@ -253,7 +346,7 @@ export function validateEdits(edits: EditInput[]): ValidateEditsResult {
     }
   }
 
-  return { ok: true, ops, checksumRefs };
+  return { ok: true, ops, checksumRefs, warnings };
 }
 
 // ==============================================================================

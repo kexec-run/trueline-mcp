@@ -1,4 +1,5 @@
 import { FNV_OFFSET_BASIS, fnv1aHashBytes, foldHash, fnv1aHash, formatChecksum, hashToLetters } from "../src/hash.ts";
+import { issueRef, resetRefStore } from "../src/ref-store.ts";
 import { join } from "node:path";
 import { writeFileSync } from "node:fs";
 
@@ -9,13 +10,27 @@ import { writeFileSync } from "node:fs";
  * streaming reads. Tests need a standalone version to fabricate valid
  * checksum strings for `handleEdit` / `handleDiff` inputs.
  */
-export function rangeChecksum(lines: string[], startLine: number, endLine: number): string {
+export function rangeChecksum(
+  lines: string[],
+  startLine: number,
+  endLine: number,
+  options?: { decimal?: boolean },
+): string {
   let hash = FNV_OFFSET_BASIS;
   const effectiveEnd = Math.min(endLine, lines.length);
+  let firstLetters = "";
+  let lastLetters = "";
   for (let i = startLine - 1; i < effectiveEnd; i++) {
-    hash = foldHash(hash, fnv1aHash(lines[i]));
+    const h = fnv1aHash(lines[i]);
+    const letters = hashToLetters(h);
+    if (i === startLine - 1) firstLetters = letters;
+    lastLetters = letters;
+    hash = foldHash(hash, h);
   }
-  return formatChecksum(startLine, effectiveEnd, hash);
+  if (options?.decimal) {
+    return formatChecksum(startLine, effectiveEnd, hash);
+  }
+  return formatChecksum(startLine, effectiveEnd, hash, firstLetters, lastLetters);
 }
 
 /**
@@ -35,10 +50,16 @@ export function lineHash(line: string): string {
  */
 export function rawRangeChecksum(bufs: Buffer[], startLine: number, endLine: number): string {
   let hash = FNV_OFFSET_BASIS;
+  let firstLetters = "";
+  let lastLetters = "";
   for (let i = 0; i < bufs.length; i++) {
-    hash = foldHash(hash, fnv1aHashBytes(bufs[i], 0, bufs[i].length));
+    const h = fnv1aHashBytes(bufs[i], 0, bufs[i].length);
+    const letters = hashToLetters(h);
+    if (i === 0) firstLetters = letters;
+    lastLetters = letters;
+    hash = foldHash(hash, h);
   }
-  return formatChecksum(startLine, endLine, hash);
+  return formatChecksum(startLine, endLine, hash, firstLetters, lastLetters);
 }
 
 /**
@@ -80,3 +101,31 @@ export function writeTestFile(testDir: string, name: string, content: string): s
   writeFileSync(path, content);
   return path;
 }
+
+/**
+ * Compute a checksum and issue a ref for a test file.
+ * Returns the ref ID (e.g. "R1").
+ */
+export function issueTestRef(filePath: string, lines: string[], startLine: number, endLine: number): string {
+  let hash = FNV_OFFSET_BASIS;
+  const effectiveEnd = Math.min(endLine, lines.length);
+  for (let i = startLine - 1; i < effectiveEnd; i++) {
+    hash = foldHash(hash, fnv1aHash(lines[i]));
+  }
+  const hex = hash.toString(16).padStart(8, "0");
+  return issueRef(filePath, startLine, effectiveEnd, hex);
+}
+
+/**
+ * Issue a ref for a raw byte buffer range.
+ */
+export function issueTestRefRaw(filePath: string, bufs: Buffer[], startLine: number, endLine: number): string {
+  let hash = FNV_OFFSET_BASIS;
+  for (const buf of bufs) {
+    hash = foldHash(hash, fnv1aHashBytes(buf, 0, buf.length));
+  }
+  const hex = hash.toString(16).padStart(8, "0");
+  return issueRef(filePath, startLine, endLine, hex);
+}
+
+export { resetRefStore };

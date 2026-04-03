@@ -11,8 +11,7 @@ const PARAM_ALIASES: Record<string, string> = {
   filePaths: "file_paths",
   files: "file_paths",
 
-  // compare_against (trueline_changes)
-  ref: "compare_against",
+  // compare_against (trueline_changes) — not ref, which is a first-class edit field
   base: "compare_against",
   branch: "compare_against",
   git_ref: "compare_against",
@@ -48,15 +47,6 @@ const PARAM_ALIASES: Record<string, string> = {
 
 // Known integer-valued parameters that agents sometimes stringify.
 const NUMERIC_KEYS = ["depth", "context_lines", "max_matches"];
-
-/**
- * Normalize a checksum string: strip whitespace, remove `#` prefix on the
- * hex portion (e.g. `"10-25:#F7E2ABCD"` → `"10-25:f7e2abcd"`), and
- * lowercase hex digits.
- */
-function normalizeChecksumStr(s: string): string {
-  return s.replace(/\s+/g, "").replace(/:#/, ":").toLowerCase();
-}
 
 /**
  * Preprocess MCP tool parameters to be more permissive about what agents send:
@@ -127,15 +117,9 @@ export function coerceParams(val: unknown): unknown {
     });
   }
 
-  // Normalize checksums: bare string → single-element array, then strip
-  // whitespace, remove # prefix on hex, and lowercase.
-  if (typeof result.checksums === "string") {
-    result.checksums = [result.checksums];
-  }
-  if (Array.isArray(result.checksums)) {
-    result.checksums = (result.checksums as unknown[]).map((c) =>
-      typeof c === "string" ? normalizeChecksumStr(c) : c,
-    );
+  // Normalize refs: bare string → single-element array.
+  if (typeof result.refs === "string") {
+    result.refs = [result.refs];
   }
 
   // Normalize edits: bare object → single-element array
@@ -153,31 +137,31 @@ export function coerceParams(val: unknown): unknown {
     }
   }
 
-  // Push top-level checksum into edits that are missing one.
-  // Models sometimes pass {checksum: "...", edits: [{range, content}]}
-  // instead of {edits: [{range, content, checksum: "..."}]}.
-  if (typeof result.checksum === "string" && Array.isArray(result.edits)) {
+  // Push top-level ref into edits that are missing one.
+  // Models sometimes pass {ref: "R1", edits: [{range, content}]}
+  // instead of {edits: [{range, content, ref: "R1"}]}.
+  if (typeof result.ref === "string" && Array.isArray(result.edits)) {
     for (const edit of result.edits) {
-      if (typeof edit === "object" && edit !== null && !("checksum" in edit)) {
-        (edit as Record<string, unknown>).checksum = result.checksum;
+      if (typeof edit === "object" && edit !== null && !("ref" in edit)) {
+        (edit as Record<string, unknown>).ref = result.ref;
       }
     }
-    delete result.checksum;
+    delete result.ref;
   }
 
-  // Coerce edit sub-objects: normalize checksums, ranges, and content.
+  // Coerce edit sub-objects: normalize refs, ranges, and content.
   if (Array.isArray(result.edits)) {
     for (const edit of result.edits) {
       if (typeof edit === "object" && edit !== null) {
         const e = edit as Record<string, unknown>;
 
         // Detect built-in Edit tool shape (old_string/new_string instead of
-        // range/checksum/content). Can't recover, but give a helpful error.
+        // range/ref/content). Can't recover, but give a helpful error.
         if (("old_string" in e || "new_string" in e) && !("range" in e)) {
           throw new Error(
             "Edit uses old_string/new_string format (from the built-in Edit tool). " +
-              "trueline_edit requires {range, checksum, content}. " +
-              "Use trueline_search to find the target lines, then pass the range and checksum from its output.",
+              "trueline_edit requires {range, ref, content}. " +
+              "Use trueline_search to find the target lines, then pass the range and ref from its output.",
           );
         }
 
@@ -189,9 +173,15 @@ export function coerceParams(val: unknown): unknown {
         if (Array.isArray(e.content)) {
           e.content = (e.content as unknown[]).map(String).join("\n");
         }
-        // Normalize checksum: strip whitespace, remove # prefix, lowercase hex
-        if (typeof e.checksum === "string") {
-          e.checksum = normalizeChecksumStr(e.checksum);
+        // Strip a single trailing newline from content. LLMs commonly append
+        // \n as a line terminator, but split("\n") treats it as a separator,
+        // creating an unwanted empty line at the end.
+        if (typeof e.content === "string" && e.content.endsWith("\n")) {
+          e.content = e.content.slice(0, -1);
+        }
+        // Normalize ref: strip whitespace
+        if (typeof e.ref === "string") {
+          e.ref = (e.ref as string).trim();
         }
         // Strip whitespace from range
         if (typeof e.range === "string") {
